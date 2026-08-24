@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Net;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using AgVpsUnlock.Core;
 
@@ -33,18 +34,29 @@ public sealed class MainForm : Form
     private readonly ConfigStore _config = ConfigStore.Load();
 
     private TextBox _ipBox = null!;
+    private TextBox _tokenBox = null!;
+    private bool _lastInstallsFound;
+    private bool _lastAllPatched;
+    private bool _lastHostsApplied;
+    private bool? _lastProbeGreen;
     private Button _saveBtn = null!;
     private Button _probeBtn = null!;
     private Button _applyBtn = null!;
     private Button _rollbackBtn = null!;
+    private Button _refreshBtn = null!;
     private ListBox _installsList = null!;
     private Label _hostsLabel = null!;
+    private Label _summaryLabel = null!;
     private Label _probeLabel = null!;
     private TextBox _log = null!;
 
     public MainForm()
     {
-        Text = "Antigravity VPS Unlock";
+        var infoVer = System.Reflection.Assembly.GetEntryAssembly()?
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion;
+        var shortVer = infoVer?.Split('+')[0];
+        Text = "Antigravity VPS Unlock" + (string.IsNullOrEmpty(shortVer) ? "" : $"  v{shortVer}");
         Font = (Font)BaseFont.Clone();
         BackColor = WindowBack;
         ForeColor = TextPrimary;
@@ -102,6 +114,16 @@ public sealed class MainForm : Form
             Font = (Font)TitleFont.Clone(),
             Padding = new Padding(0, 0, 0, 4)
         };
+        _summaryLabel = new Label
+        {
+            Text = "",
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            ForeColor = TextSecondary,
+            Font = new Font("Segoe UI", 9.5f),
+            Padding = new Padding(0, 6, 0, 0)
+        };
+        header.Controls.Add(_summaryLabel);
         header.Controls.Add(subtitle);
         header.Controls.Add(title);
 
@@ -163,6 +185,46 @@ public sealed class MainForm : Form
         ipRow.Controls.Add(_saveBtn);
         ipRow.Controls.Add(_probeBtn);
 
+        var tokenRow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            WrapContents = false,
+            BackColor = WindowBack,
+            Padding = new Padding(18, 0, 18, 10)
+        };
+        var tokCaption = new Label
+        {
+            Text = "Токен доступа:",
+            AutoSize = true,
+            ForeColor = TextSecondary,
+            Margin = new Padding(0, 8, 12, 0)
+        };
+        _tokenBox = new TextBox
+        {
+            BorderStyle = BorderStyle.None,
+            BackColor = InputBack,
+            ForeColor = TextPrimary,
+            Width = 320,
+            Font = (Font)BaseFont.Clone(),
+            Text = _config.VpsToken,
+            PlaceholderText = "пусто — сервер работает без блокировки"
+        };
+        var tokHost = new Panel
+        {
+            Width = 324,
+            Height = _tokenBox.Height + 4,
+            Padding = new Padding(1, 2, 1, 2),
+            BackColor = BorderColor,
+            Margin = new Padding(0, 5, 14, 0)
+        };
+        _tokenBox.Dock = DockStyle.Fill;
+        _tokenBox.GotFocus += (_, _) => tokHost.BackColor = Accent;
+        _tokenBox.LostFocus += (_, _) => tokHost.BackColor = BorderColor;
+        tokHost.Controls.Add(_tokenBox);
+        tokenRow.Controls.Add(tokCaption);
+        tokenRow.Controls.Add(tokHost);
+
         var mid = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -184,7 +246,7 @@ public sealed class MainForm : Form
             ForeColor = TextPrimary,
             Font = (Font)MonoFont.Clone(),
             DrawMode = DrawMode.OwnerDrawFixed,
-            ItemHeight = 19,
+            ItemHeight = Math.Max(18, MonoFont.Height + 6),
             IntegralHeight = false
         };
         _installsList.DrawItem += Installs_DrawItem;
@@ -228,8 +290,12 @@ public sealed class MainForm : Form
         _rollbackBtn = MkOutlinedBtn("Полный откат", RollbackAllAsync,
             CardBack, Danger,
             Color.FromArgb(0x3A, 0x28, 0x2B), Color.FromArgb(0x2E, 0x21, 0x24));
+        _refreshBtn = MkBtn("Обновить", () => _ = RefreshAllAsync(),
+            SecondaryBtnBack, TextSecondary,
+            Color.FromArgb(0x34, 0x39, 0x45), Color.FromArgb(0x22, 0x26, 0x30));
         actions.Controls.Add(_applyBtn);
         actions.Controls.Add(_rollbackBtn);
+        actions.Controls.Add(_refreshBtn);
 
         var logHost = new Panel
         {
@@ -250,14 +316,49 @@ public sealed class MainForm : Form
             ForeColor = TextPrimary,
             Font = (Font)MonoFont.Clone()
         };
+        var logTools = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            WrapContents = false,
+            BackColor = LogBack,
+            Padding = new Padding(2, 4, 2, 6)
+        };
+        var copyLink = new LinkLabel
+        {
+            Text = "Копировать всё",
+            AutoSize = true,
+            LinkColor = Accent,
+            LinkBehavior = LinkBehavior.HoverUnderline,
+            Margin = new Padding(0, 0, 16, 0)
+        };
+        copyLink.Click += (_, _) =>
+        {
+            try { Clipboard.SetText(_log.Text); }
+            catch (Exception ex) { Log("[!!] Буфер обмена: " + ex.Message); }
+        };
+        var clearLink = new LinkLabel
+        {
+            Text = "Очистить",
+            AutoSize = true,
+            LinkColor = Accent,
+            LinkBehavior = LinkBehavior.HoverUnderline
+        };
+        clearLink.Click += (_, _) => _log.Clear();
+        logTools.Controls.Add(copyLink);
+        logTools.Controls.Add(clearLink);
+
         logHost.Controls.Add(_log);
+        logHost.Controls.Add(logTools);
 
         Controls.Add(mid);
         Controls.Add(logHost);
         Controls.Add(actions);
+        Controls.Add(tokenRow);
         Controls.Add(ipRow);
         Controls.Add(header);
 
+        AcceptButton = _probeBtn;
         ResumeLayout(true);
     }
 
@@ -336,6 +437,8 @@ public sealed class MainForm : Form
         TextRenderer.DrawText(e.Graphics, text, e.Font ?? MonoFont,
             new Point(e.Bounds.X + 2, e.Bounds.Y + 2), selected ? TextPrimary : color,
             TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+        if ((e.State & DrawItemState.Focus) != 0)
+            e.DrawFocusRectangle();
     }
 
     private Button MkBtn(string text, Action onClick, Color back, Color fore, Color hover, Color pressed)
@@ -434,7 +537,7 @@ public sealed class MainForm : Form
     private void Log(string msg)
     {
         if (_log.InvokeRequired) { _log.BeginInvoke(() => Log(msg)); return; }
-        _log.AppendText($"[{DateTime.Now:HH:mm:ss}] {msg}\r\n");
+        _log.AppendText($"[{DateTime.Now:HH:mm:ss.fff}] {msg}\r\n");
     }
 
     private bool _refreshing;
@@ -492,6 +595,11 @@ public sealed class MainForm : Form
                 SetStatus(_hostsLabel, Success, $"✓ hosts: закреплено ({data.HostsCount} имён)");
             else
                 SetStatus(_hostsLabel, TextSecondary, "• hosts: блока нет");
+
+            _lastInstallsFound = data.Rows.Count > 0;
+            _lastAllPatched = data.Rows.Count > 0 && data.Rows.All(r => r.Status == "пропатчен");
+            _lastHostsApplied = data.HostsApplied;
+            UpdateSummary();
         }
         catch (Exception ex)
         {
@@ -513,8 +621,26 @@ public sealed class MainForm : Form
             return;
         }
         _config.VpsIp = ip;
+        _config.VpsToken = _tokenBox.Text.Trim();
         _config.Save();
         Log($"Конфигурация сохранена: {ip}");
+        UpdateSummary();
+    }
+
+    private void UpdateSummary()
+    {
+        if (!_lastInstallsFound)
+            SetStatus(_summaryLabel, Warning, "• Antigravity не найдена — установите и нажмите «Обновить»");
+        else if (!IPAddress.TryParse(_ipBox.Text.Trim(), out _))
+            SetStatus(_summaryLabel, Warning, "• Укажите IP сервера и нажмите «Сохранить»");
+        else if (!_lastHostsApplied || !_lastAllPatched)
+            SetStatus(_summaryLabel, Danger, "• Требуется патч — нажмите «Применить патч»");
+        else if (_lastProbeGreen == false)
+            SetStatus(_summaryLabel, Danger, "• Патч есть, но проверка не пройдена — нажмите «Проверить сервер»");
+        else if (_lastProbeGreen == true)
+            SetStatus(_summaryLabel, Success, "✓ Всё готово к работе");
+        else
+            SetStatus(_summaryLabel, TextSecondary, "• Нажмите «Проверить сервер» для финальной проверки");
     }
 
     private async Task ProbeAsync()
@@ -526,17 +652,26 @@ public sealed class MainForm : Form
             Log($"Проверка отменена: некорректный IP «{ip}».");
             return;
         }
-        SetStatus(_probeLabel, TextSecondary, $"• Проверка {ip}:443...");
+        _lastProbeGreen = null;
+        if (_config.VpsToken.Length > 0)
+        {
+            SetStatus(_probeLabel, TextSecondary, $"• Стучимся на {ip}:{KnockClient.DefaultPort}...");
+            var knocked = await KnockClient.SendAsync(ip, _config.VpsToken);
+            Log(knocked ? "[OK] Доступ подтверждён" : "[!!] Стук не подтверждён (сервер закрыт?) — продолжаем");
+        }
+        var progress = new Progress<string>(msg => SetStatus(_probeLabel, TextSecondary, $"• {msg}"));
         Log($"Проверка {ip}:443...");
 
         ProbeResult res;
         try
         {
-            res = await ServerProbe.ProbeAsync(ip, _config.RoutedHosts());
+            res = await ServerProbe.ProbeAsync(ip, _config.RoutedHosts(), progress: progress);
         }
         catch (Exception ex)
         {
             SetStatus(_probeLabel, Danger, $"✗ Ошибка проверки: {ex.Message}");
+            _lastProbeGreen = false;
+            UpdateSummary();
             Log($"[!!] Проверка завершилась ошибкой: {ex.Message}");
             return;
         }
@@ -558,18 +693,24 @@ public sealed class MainForm : Form
 
         if (!res.TcpOk)
         {
+            _lastProbeGreen = false;
+            UpdateSummary();
             SetStatus(_probeLabel, Danger, $"✗ Сервер недоступен: {res.Error ?? "таймаут"}");
             return;
         }
         if (!res.TlsOk)
         {
             var reason = string.IsNullOrEmpty(res.Error) ? "" : $" ({res.Error})";
+            _lastProbeGreen = false;
+            UpdateSummary();
             SetStatus(_probeLabel, Warning,
                 "! Порт 443 открыт, но сертификат Google не получен" + reason + " — SNI-форвардер не настроен или соединение перехватывается?");
             return;
         }
         if (res.RoutingLeak)
         {
+            _lastProbeGreen = false;
+            UpdateSummary();
             SetStatus(_probeLabel, Danger,
                 $"✗ Туннель до Google работает, НО часть имён уходит мимо сервера! {res.LeakDetail} Это вызывает ошибку «User location is not supported». Пере-примените патч и проверьте IPv6.");
             return;
@@ -580,6 +721,8 @@ public sealed class MainForm : Form
             true when res.DnsHijacked => "; DNS перехватывается провайдером → работает hosts",
             _ => "; DNS отвечает"
         };
+        _lastProbeGreen = true;
+        UpdateSummary();
         SetStatus(_probeLabel, Success, $"✓ Сервер работает, туннель до Google в порядке{dnsNote}");
     }
 
@@ -607,6 +750,13 @@ public sealed class MainForm : Form
             return;
         }
 
+        if (_config.VpsToken.Length > 0)
+        {
+            Log($"Стучимся на {ip}:{KnockClient.DefaultPort}...");
+            var knocked = await KnockClient.SendAsync(ip, _config.VpsToken);
+            Log(knocked ? "[OK] Доступ подтверждён" : "[!!] Стук не подтверждён (сервер закрыт?) — продолжаем");
+        }
+
         UseWaitCursor = true;
         try
         {
@@ -621,7 +771,7 @@ public sealed class MainForm : Form
 
                 Log("Закрепляем имена в hosts за сервером...");
                 var ok = HostsManager.Apply(_config.RoutedHosts(), addr);
-                Log(ok ? "[OK] hosts обновлён" : "[!!] не удалось записать hosts (нужны права администратора)");
+                Log(ok ? "[OK] hosts обновлён" : $"[!!] не удалось записать hosts: {HostsManager.LastError ?? "нужны права администратора"}");
 
                 Log($"\nГотово. Патчей: {patched}, уже было: {already}, ошибок: {failed}.");
                 Log("Запустите Antigravity и войдите в аккаунт Google.");
@@ -652,7 +802,7 @@ public sealed class MainForm : Form
                 KillAntigravityProcesses();
                 var (restored, failed) = BinaryPatcher.RestoreAll(Log);
                 var hostsOk = HostsManager.Remove();
-                Log(hostsOk ? "[OK] hosts-блок удалён" : "[!!] не удалось изменить hosts");
+                Log(hostsOk ? "[OK] hosts-блок удалён" : $"[!!] не удалось изменить hosts: {HostsManager.LastError ?? "причина неизвестна"}");
                 Log($"\nОткат завершён. Восстановлено: {restored}, ошибок: {failed}.");
             });
             await RefreshAllAsync();

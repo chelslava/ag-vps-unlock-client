@@ -40,7 +40,8 @@ public static class ServerProbe
     private static readonly TimeSpan ResolveTimeout = TimeSpan.FromSeconds(4);
 
     public static async Task<ProbeResult> ProbeAsync(
-        string ip, IEnumerable<string>? routedHosts = null, CancellationToken ct = default)
+        string ip, IEnumerable<string>? routedHosts = null, CancellationToken ct = default,
+        IProgress<string>? progress = null)
     {
         if (!IPAddress.TryParse(ip, out var addr))
         {
@@ -48,13 +49,34 @@ public static class ServerProbe
                 [], false, null);
         }
 
-        // --- TLS over TCP 443 with a routed SNI (bounded end-to-end) ---
+        void Report(string msg) => progress?.Report(msg);
+
+        Report($"TCP/TLS {ip}:443…");
+        var tlsTask = ProbeTlsAsync(addr, ct, Report);
+
+        Report("UDP/53…");
+        var udpTask = ProbeUdpDnsAsync(addr, ct);
+
+        Report("Резолв routed-имён…");
+        var resolveTask = ResolveAll(routedHosts, ct);
+
+        await Task.WhenAll(tlsTask, udpTask, resolveTask);
+
+        var (tcpOk, tlsOk, subject, error) = tlsTask.Result;
+        var (dnsReachable, hijacked) = udpTask.Result;
+        var resolved = resolveTask.Result;
+
+        var (leak, leakDetail) = DetectLeak(resolved, addr);
+        return new ProbeResult(tcpOk, tlsOk, subject, dnsReachable, hijacked,
+            tlsOk ? null : error, resolved, leak, leakDetail);
+    }
+
+    private static async Task<(bool TcpOk, bool TlsOk, string? Subject, string? Error)> ProbeTlsAsync(
+        IPAddress addr, CancellationToken ct, Action<string> report)
+    {
+        bool tcpOk = false;
         var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         probeCts.CancelAfter(TlsTimeout);
-
-        bool tcpOk = false, tlsOk = false;
-        string? subject = null;
-        string? error = null;
         try
         {
             using var client = new TcpClient();
@@ -64,74 +86,61 @@ public static class ServerProbe
                 throw new SocketException(10060); // TIMED_OUT
             tcpOk = true;
 
+            report("TCP ok, TLS-рукопожатие…");
             using var ssl = new SslStream(client.GetStream(), false);
             await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
             {
                 TargetHost = "daily-cloudcode-pa.googleapis.com"
             }, probeCts.Token);
-            subject = ssl.RemoteCertificate?.Subject;
-            tlsOk = true;
+            var subject = ssl.RemoteCertificate?.Subject;
+
+            // Chain and SAN are already validated by SslStream; the explicit
+            // check is a belt-and-braces guard against an unexpected issuer.
+            var googleCert = subject?.Contains("google", StringComparison.OrdinalIgnoreCase) == true;
+            return (true, googleCert, subject, googleCert ? null : "сертификат не от Google");
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            error = tcpOk ? "таймаут TLS-рукопожатия" : "таймаут подключения";
+            return (tcpOk, false, null, tcpOk ? "таймаут TLS-рукопожатия" : "таймаут подключения");
         }
         catch (System.Security.Authentication.AuthenticationException)
         {
             // chain/hostname validation failed - the path is intercepted or
             // something other than the real Google front is answering
-            error = "сертификат не прошёл проверку цепочки/SAN (возможен перехват)";
+            return (tcpOk, false, null, "сертификат не прошёл проверку цепочки/SAN (возможен перехват)");
         }
         catch (Exception ex)
         {
-            error = ex.Message;
+            return (tcpOk, false, null, ex.Message);
         }
         finally
         {
             probeCts.Dispose();
         }
+    }
 
-        // --- Plain UDP A query for a routed name ---
-        bool dnsReachable = false, hijacked = false;
+    private static async Task<(bool Reachable, bool Hijacked)> ProbeUdpDnsAsync(IPAddress addr, CancellationToken ct)
+    {
         try
         {
             using var udp = new UdpClient();
             udp.Connect(addr, 53);
             ushort txId = (ushort)Random.Shared.Next(1, ushort.MaxValue);
-            var query = BuildQuery("daily-cloudcode-pa.googleapis.com", txId);
-            await udp.SendAsync(query, ct);
+            await udp.SendAsync(BuildQuery("daily-cloudcode-pa.googleapis.com", txId), ct);
             var recvTask = udp.ReceiveAsync(ct).AsTask();
             var done = await Task.WhenAny(recvTask, Task.Delay(DnsUdpTimeout, ct));
-            if (done == recvTask && IsValidReply(recvTask.Result.Buffer, txId))
-            {
-                dnsReachable = true;
-                var answer = ParseARecords(recvTask.Result.Buffer);
-                // Our dnsmasq answers with the VPS itself. Genuine Google
-                // addresses mean somebody else answered on the way.
-                hijacked = answer.All(a => !a.Equals(addr)) && answer.Count > 0;
-            }
+            if (done != recvTask || !IsValidReply(recvTask.Result.Buffer, txId))
+                return (false, false);
+            var answer = ParseARecords(recvTask.Result.Buffer);
+            // Our dnsmasq answers with the VPS itself. Genuine Google addresses
+            // mean somebody else answered on the way.
+            return (true, answer.All(a => !a.Equals(addr)) && answer.Count > 0);
         }
         catch
         {
             // unreachable DNS is reported via flags alone
+            return (false, false);
         }
-
-        // --- Do the routed names actually resolve to the VPS on this machine? ---
-        List<HostResolve>? resolved = null;
-        bool leak = false;
-        string? leakDetail = null;
-        try
-        {
-            resolved = await ResolveAll(routedHosts, ct);
-            (leak, leakDetail) = DetectLeak(resolved, addr);
-        }
-        catch
-        {
-            // diagnostics only - never fail the probe because of it
-        }
-
-        return new ProbeResult(tcpOk, tlsOk, subject, dnsReachable, hijacked,
-            tlsOk ? null : error, resolved ?? [], leak, leakDetail);
     }
 
     private static async Task<List<HostResolve>> ResolveAll(

@@ -97,6 +97,9 @@ public static class HostsManager
         return kept.ToString().Replace("\r\n", "\n").Replace("\n", "\r\n");
     }
 
+    /// <summary>Why the last Apply/Remove returned false; null on success.</summary>
+    public static string? LastError { get; private set; }
+
     private static bool Rewrite(Func<string, string> transform)
     {
         try
@@ -104,13 +107,27 @@ public static class HostsManager
             var path = HostsPath;
             var existing = File.Exists(path) ? File.ReadAllText(path) : "";
             var updated = transform(existing);
-            if (updated != existing)
-                File.WriteAllText(path, updated);
+            if (updated == existing)
+            {
+                LastError = null;
+                return true;
+            }
+
+            // Atomic swap with one backup generation: a crash mid-write must
+            // never leave a broken hosts file behind.
+            var tmp = path + ".agvps.tmp";
+            var bak = path + ".agvps.bak";
+            File.WriteAllText(tmp, updated);
+            if (File.Exists(bak)) File.Delete(bak);
+            File.Replace(tmp, path, bak);
+
             FlushDnsCache();
+            LastError = null;
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            LastError = ex.Message;
             return false;
         }
     }

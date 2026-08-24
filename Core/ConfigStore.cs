@@ -7,6 +7,9 @@ namespace AgVpsUnlock.Core;
 public sealed class ConfigStore
 {
     public string VpsIp { get; set; } = "";
+    /// <summary>Shared relay secret from setup-vps.sh (`status` prints it).
+    /// Empty when the server runs unlocked - no knock is sent then.</summary>
+    public string VpsToken { get; set; } = "";
     /// <summary>Extra hostnames to route, when the upstream product grows new
     /// endpoints. The core four are always included.</summary>
     public List<string> ExtraHosts { get; set; } = new();
