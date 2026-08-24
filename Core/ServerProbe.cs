@@ -64,17 +64,23 @@ public static class ServerProbe
                 throw new SocketException(10060); // TIMED_OUT
             tcpOk = true;
 
-            using var ssl = new SslStream(client.GetStream(), false, (_, _, _, _) => true);
+            using var ssl = new SslStream(client.GetStream(), false);
             await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
             {
                 TargetHost = "daily-cloudcode-pa.googleapis.com"
             }, probeCts.Token);
             subject = ssl.RemoteCertificate?.Subject;
-            tlsOk = subject?.Contains("google", StringComparison.OrdinalIgnoreCase) == true;
+            tlsOk = true;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             error = tcpOk ? "таймаут TLS-рукопожатия" : "таймаут подключения";
+        }
+        catch (System.Security.Authentication.AuthenticationException)
+        {
+            // chain/hostname validation failed - the path is intercepted or
+            // something other than the real Google front is answering
+            error = "сертификат не прошёл проверку цепочки/SAN (возможен перехват)";
         }
         catch (Exception ex)
         {
@@ -91,11 +97,12 @@ public static class ServerProbe
         {
             using var udp = new UdpClient();
             udp.Connect(addr, 53);
-            var query = BuildQuery("daily-cloudcode-pa.googleapis.com");
+            ushort txId = (ushort)Random.Shared.Next(1, ushort.MaxValue);
+            var query = BuildQuery("daily-cloudcode-pa.googleapis.com", txId);
             await udp.SendAsync(query, ct);
             var recvTask = udp.ReceiveAsync(ct).AsTask();
             var done = await Task.WhenAny(recvTask, Task.Delay(DnsUdpTimeout, ct));
-            if (done == recvTask)
+            if (done == recvTask && IsValidReply(recvTask.Result.Buffer, txId))
             {
                 dnsReachable = true;
                 var answer = ParseARecords(recvTask.Result.Buffer);
@@ -181,13 +188,13 @@ public static class ServerProbe
             : (bad.Count > 0, string.Join("; ", parts));
     }
 
-    private static byte[] BuildQuery(string name)
+    private static byte[] BuildQuery(string name, ushort txId)
     {
         var q = new List<byte>(name.Length + 18)
         {
-            0x12, 0x34,                   // id
-            0x01, 0x00,                   // recursion desired
-            0x00, 0x01, 0, 0, 0, 0, 0, 0  // one question, nothing else
+            (byte)(txId >> 8), (byte)txId,  // id
+            0x01, 0x00,                     // recursion desired
+            0x00, 0x01, 0, 0, 0, 0, 0, 0    // one question, nothing else
         };
         foreach (var label in name.Split('.'))
         {
@@ -196,6 +203,32 @@ public static class ServerProbe
         }
         q.AddRange([0x00, 0x00, 0x01, 0x00, 0x01]); // A IN
         return q.ToArray();
+    }
+
+    /// <summary>Reply must echo our transaction id and carry QR=1, RCODE=0.</summary>
+    private static bool IsValidReply(byte[] buf, ushort txId)
+    {
+        if (buf.Length < 12) return false;
+        if (((buf[0] << 8) | buf[1]) != txId) return false;
+        if ((buf[2] & 0x80) == 0) return false; // QR must be a response
+        return (buf[3] & 0x0F) == 0;            // RCODE must be NOERROR
+    }
+
+    private static bool TrySkipName(byte[] buf, ref int i)
+    {
+        while (i < buf.Length)
+        {
+            int len = buf[i];
+            if (len == 0) { i += 1; return true; }
+            if ((len & 0xC0) == 0xC0)
+            {
+                if (i + 2 > buf.Length) return false;
+                i += 2;
+                return true;
+            }
+            i += len + 1;
+        }
+        return false; // ran off the buffer without a root label
     }
 
     private static List<IPAddress> ParseARecords(byte[] buf)
@@ -207,24 +240,13 @@ public static class ServerProbe
         int i = 12;
         for (int q = 0; q < questions && i < buf.Length; q++)
         {
-            while (i < buf.Length && buf[i] != 0)
-            {
-                if ((buf[i] & 0xC0) == 0xC0) { i += 2; goto labels_done; }
-                i += buf[i] + 1;
-            }
-            i += 1 + 4; // root byte + type+class
-        labels_done:;
+            if (!TrySkipName(buf, ref i)) return ips;
+            i += 4; // type + class
         }
-        for (int a = 0; a < answers && i + 10 <= buf.Length; a++)
+        for (int a = 0; a < answers; a++)
         {
-            // skip name (possibly compressed)
-            while (i < buf.Length && buf[i] != 0)
-            {
-                if ((buf[i] & 0xC0) == 0xC0) { i += 2; goto name_done; }
-                i += buf[i] + 1;
-            }
-            i += 1;
-        name_done:;
+            if (i >= buf.Length || !TrySkipName(buf, ref i)) return ips;
+            if (i + 10 > buf.Length) return ips;
             int type = (buf[i] << 8) | buf[i + 1];
             int rdlen = (buf[i + 8] << 8) | buf[i + 9];
             i += 10;

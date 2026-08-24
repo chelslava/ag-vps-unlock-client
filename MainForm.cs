@@ -524,7 +524,9 @@ public sealed class MainForm : Form
         }
         if (!res.TlsOk)
         {
-            SetStatus(_probeLabel, Warning, "! Порт 443 открыт, но сертификат Google не получен — SNI-форвардер не настроен?");
+            var reason = string.IsNullOrEmpty(res.Error) ? "" : $" ({res.Error})";
+            SetStatus(_probeLabel, Warning,
+                "! Порт 443 открыт, но сертификат Google не получен" + reason + " — SNI-форвардер не настроен или соединение перехватывается?");
             return;
         }
         if (res.RoutingLeak)
@@ -542,18 +544,34 @@ public sealed class MainForm : Form
         SetStatus(_probeLabel, Success, $"✓ Сервер работает, туннель до Google в порядке{dnsNote}");
     }
 
+    private bool AnyAntigravityRunning() =>
+        Process.GetProcessesByName("Antigravity").Length > 0 ||
+        Process.GetProcessesByName("agy").Length > 0 ||
+        Process.GetProcessesByName("language_server").Length > 0;
+
     private void ApplyPatch()
     {
-        var ip = _config.VpsIp.Trim();
-        if (!IPAddress.TryParse(ip, out _))
+        var ip = _ipBox.Text.Trim();
+        if (!IPAddress.TryParse(ip, out var addr))
         {
-            MessageBox.Show("Сначала укажите и сохраните IP сервера.", "Ошибка",
+            MessageBox.Show("Введите корректный IPv4-адрес сервера.", "Ошибка",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
+        _config.VpsIp = ip;
+        _config.Save();
+
+        if (AnyAntigravityRunning() && MessageBox.Show(
+                "Процессы Antigravity будут принудительно закрыты (несохранённая работа будет потеряна). Продолжить?",
+                "Применить патч", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+        {
+            return;
+        }
+
         UseWaitCursor = true;
         try
         {
+            Log($"Патчим на сервер {ip}...");
             Log("Завершаем процессы Antigravity...");
             KillAntigravityProcesses();
 
@@ -561,7 +579,7 @@ public sealed class MainForm : Form
             var (patched, already, failed) = BinaryPatcher.ApplyAll(Log);
 
             Log("Закрепляем имена в hosts за сервером...");
-            var ok = HostsManager.Apply(_config.RoutedHosts(), IPAddress.Parse(ip));
+            var ok = HostsManager.Apply(_config.RoutedHosts(), addr);
             Log(ok ? "[OK] hosts обновлён" : "[!!] не удалось записать hosts (нужны права администратора)");
 
             Log($"\nГотово. Патчей: {patched}, уже было: {already}, ошибок: {failed}.");
@@ -576,6 +594,13 @@ public sealed class MainForm : Form
 
     private void RollbackAll()
     {
+        if (MessageBox.Show(
+                "Будут восстановлены исходные бинарники Antigravity и удалён hosts-блок. Процессы Antigravity будут закрыты. Продолжить?",
+                "Полный откат", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+        {
+            return;
+        }
+
         UseWaitCursor = true;
         try
         {
