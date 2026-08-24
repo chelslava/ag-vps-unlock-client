@@ -163,7 +163,7 @@ public static class ServerProbe
         return result;
     }
 
-    private static (bool Leak, string? Detail) DetectLeak(
+    internal static (bool Leak, string? Detail) DetectLeak(
         IReadOnlyList<HostResolve> resolved, IPAddress vps)
     {
         var bad = new List<string>();
@@ -188,7 +188,7 @@ public static class ServerProbe
             : (bad.Count > 0, string.Join("; ", parts));
     }
 
-    private static byte[] BuildQuery(string name, ushort txId)
+    internal static byte[] BuildQuery(string name, ushort txId)
     {
         var q = new List<byte>(name.Length + 18)
         {
@@ -206,7 +206,7 @@ public static class ServerProbe
     }
 
     /// <summary>Reply must echo our transaction id and carry QR=1, RCODE=0.</summary>
-    private static bool IsValidReply(byte[] buf, ushort txId)
+    internal static bool IsValidReply(byte[] buf, ushort txId)
     {
         if (buf.Length < 12) return false;
         if (((buf[0] << 8) | buf[1]) != txId) return false;
@@ -214,7 +214,7 @@ public static class ServerProbe
         return (buf[3] & 0x0F) == 0;            // RCODE must be NOERROR
     }
 
-    private static bool TrySkipName(byte[] buf, ref int i)
+    internal static bool TrySkipName(byte[] buf, ref int i)
     {
         while (i < buf.Length)
         {
@@ -231,7 +231,7 @@ public static class ServerProbe
         return false; // ran off the buffer without a root label
     }
 
-    private static List<IPAddress> ParseARecords(byte[] buf)
+    internal static List<IPAddress> ParseARecords(byte[] buf)
     {
         var ips = new List<IPAddress>();
         if (buf.Length < 12) return ips;

@@ -74,20 +74,25 @@ public static class HostsManager
 
     public static bool Remove() => Rewrite(existing => StripBlock(existing));
 
-    private static string StripBlock(string existing)
+    internal static string StripBlock(string existing)
     {
+        var segments = existing.Split(["\r\n", "\n"], StringSplitOptions.None);
         var kept = new StringBuilder();
         bool inside = false;
-        foreach (var line in existing.Split(["\r\n", "\n"], StringSplitOptions.None))
+        for (int i = 0; i < segments.Length; i++)
         {
-            var t = line.TrimStart();
+            // A trailing newline yields an empty final segment from Split; it is
+            // not a real line. Dropping it keeps no-op rewrites byte-stable.
+            if (i == segments.Length - 1 && segments[i].Length == 0)
+                break;
+            var t = segments[i].TrimStart();
             if (t.StartsWith(BeginMark)) { inside = true; continue; }
             if (inside)
             {
                 if (t.StartsWith(EndMark)) inside = false;
                 continue;
             }
-            kept.Append(line).Append('\n');
+            kept.Append(segments[i]).Append('\n');
         }
         return kept.ToString().Replace("\r\n", "\n").Replace("\n", "\r\n");
     }

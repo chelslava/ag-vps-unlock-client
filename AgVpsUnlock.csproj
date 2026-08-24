@@ -16,4 +16,8 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="AgVpsUnlock.Tests" />
+  </ItemGroup>
+
 </Project>
