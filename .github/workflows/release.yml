@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run tests
+        run: dotnet test client.Tests/AgVpsUnlock.Tests.csproj -c Release --nologo
+
+      # Tag formats:
+      #   v1.2.3            -> app 1.2.3, no Antigravity pin
+      #   v1.2.3-ag1.0.9    -> app 1.2.3, patch targets Antigravity 1.0.9
+      - name: Compute versions
+        id: ver
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          APP="${TAG%%-*}"
+          AG=""
+          case "$TAG" in
+            *-ag*) AG="${TAG#*-ag}" ;;
+          esac
+          EXE="AgVpsUnlock-${APP}.exe"
+          if [ -n "$AG" ]; then
+            EXE="AgVpsUnlock-${APP}-antigravity-${AG}.exe"
+            echo "infover=${APP}+ag${AG}" >> "$GITHUB_OUTPUT"
+            echo "agnote=Целевая версия Antigravity: **${AG}**. Для других версий патч может не найти сигнатуру — клиент покажет статус «НОВАЯ ВЕРСИЯ?»." >> "$GITHUB_OUTPUT"
+          else
+            echo "infover=${APP}" >> "$GITHUB_OUTPUT"
+            echo "agnote=" >> "$GITHUB_OUTPUT"
+          fi
+          echo "app=${APP}" >> "$GITHUB_OUTPUT"
+          echo "ag=${AG}" >> "$GITHUB_OUTPUT"
+          echo "exe=${EXE}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish (single-file exe)
+        working-directory: client
+        run: >
+          dotnet publish -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:Version=${{ steps.ver.outputs.app }}
+          -p:InformationalVersion=${{ steps.ver.outputs.infover }}
+          -o publish
+
+      - name: Rename with version
+        shell: pwsh
+        run: |
+          Move-Item "client/publish/AgVpsUnlock.exe" "client/publish/${{ steps.ver.outputs.exe }}"
+
+      - name: Generate SHA256 checksums
+        shell: pwsh
+        working-directory: client/publish
+        run: |
+          $hash = (Get-FileHash "${{ steps.ver.outputs.exe }}" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  ${{ steps.ver.outputs.exe }}" | Out-File SHA256SUMS.txt -Encoding ascii
+          Get-Content SHA256SUMS.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.ver.outputs.exe }}
+          path: |
+            client/publish/${{ steps.ver.outputs.exe }}
+            client/publish/SHA256SUMS.txt
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          files: |
+            client/publish/${{ steps.ver.outputs.exe }}
+            client/publish/SHA256SUMS.txt
+          append_body: true
+          body: |
+            ${{ steps.ver.outputs.agnote }}
+
+            Файл: `${{ steps.ver.outputs.exe }}` (Windows x64, один файл, самодостаточный).
+            Целостность: `SHA256SUMS.txt` рядом с exe — сверьте хеш перед запуском.
