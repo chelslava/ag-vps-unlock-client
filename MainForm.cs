@@ -99,7 +99,7 @@ public sealed class MainForm : Form
         };
         var subtitle = new Label
         {
-            Text = "Маршрутизация Google API через ваш собственный сервер",
+            Text = "Безопасный доступ к Antigravity из любого региона",
             AutoSize = true,
             Dock = DockStyle.Top,
             ForeColor = TextSecondary,
@@ -208,7 +208,7 @@ public sealed class MainForm : Form
             Width = 320,
             Font = (Font)BaseFont.Clone(),
             Text = _config.VpsToken,
-            PlaceholderText = "пусто — сервер работает без блокировки"
+            PlaceholderText = "выдаётся вместе с подпиской"
         };
         var tokHost = new Panel
         {
@@ -655,9 +655,9 @@ public sealed class MainForm : Form
         _lastProbeGreen = null;
         if (_config.VpsToken.Length > 0)
         {
-            SetStatus(_probeLabel, TextSecondary, $"• Стучимся на {ip}:{KnockClient.DefaultPort}...");
+            SetStatus(_probeLabel, TextSecondary, "• Проверка доступа...");
             var knocked = await KnockClient.SendAsync(ip, _config.VpsToken);
-            Log(knocked ? "[OK] Доступ подтверждён" : "[!!] Стук не подтверждён (сервер закрыт?) — продолжаем");
+            Log(knocked ? "[OK] Доступ подтверждён" : "[!!] Доступ не подтверждён — сверьте токен или напишите в поддержку");
         }
         var progress = new Progress<string>(msg => SetStatus(_probeLabel, TextSecondary, $"• {msg}"));
         Log($"Проверка {ip}:443...");
@@ -752,9 +752,9 @@ public sealed class MainForm : Form
 
         if (_config.VpsToken.Length > 0)
         {
-            Log($"Стучимся на {ip}:{KnockClient.DefaultPort}...");
+            Log("Проверяем доступ...");
             var knocked = await KnockClient.SendAsync(ip, _config.VpsToken);
-            Log(knocked ? "[OK] Доступ подтверждён" : "[!!] Стук не подтверждён (сервер закрыт?) — продолжаем");
+            Log(knocked ? "[OK] Доступ подтверждён" : "[!!] Доступ не подтверждён — сверьте токен или напишите в поддержку");
         }
 
         UseWaitCursor = true;
