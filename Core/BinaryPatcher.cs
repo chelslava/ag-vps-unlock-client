@@ -8,12 +8,16 @@ public sealed record InstallInfo(string Root, string Label, List<string> Binarie
 /// <summary>
 /// Finds Antigravity-family installs and swaps the eligibility field name inside
 /// their native binaries. The rename is length-preserving ("ineligible" →
-/// "inexigible"), so the PE layout, offsets and file size never move.
+/// "inexigible"), so the PE layout, offsets and file size never move - which is
+/// what allows patching in place from streamed offsets instead of loading whole
+/// ~150 MB images into memory.
 /// </summary>
 public static class BinaryPatcher
 {
     private const string OldName = "ineligible";
     private const string NewName = "inexigible";
+    private static readonly byte[] OldBytes = Encoding.ASCII.GetBytes(OldName);
+    private static readonly byte[] NewBytes = Encoding.ASCII.GetBytes(NewName);
 
     /// <summary>Fixed candidate locations; no registry scan on purpose.</summary>
     public static IReadOnlyList<string> CandidateRoots()
@@ -63,8 +67,8 @@ public static class BinaryPatcher
 
     public enum BinaryState { Patched, Unpatched, Unknown }
 
-    /// <summary>Single streaming pass over the file: enough to tell patched
-    /// from stock without loading ~150 MB into memory.</summary>
+    /// <summary>Single chunked pass over the file: enough to tell patched
+    /// from stock without loading it into memory.</summary>
     public static BinaryState Inspect(string path)
     {
         try
@@ -81,40 +85,49 @@ public static class BinaryPatcher
         }
     }
 
-    private static (int newCount, int oldCount) CountNames(FileStream fs)
+    /// <summary>Vectorized streaming count of both names over an arbitrary
+    /// stream. Chunks carry a needle-length-1 tail overlap so occurrences that
+    /// straddle chunk boundaries are still found exactly once.</summary>
+    internal static (int newCount, int oldCount) CountNames(Stream stream)
     {
-        var newBuf = Encoding.ASCII.GetBytes(NewName);
-        var oldBuf = Encoding.ASCII.GetBytes(OldName);
-        int windowLen = newBuf.Length;
-        var window = new byte[windowLen];
-        int filled = 0;
+        const int ChunkSize = 1 << 20;
+        int overlap = OldBytes.Length - 1;
+        var buf = new byte[ChunkSize + overlap];
+        int tail = 0;
         int newCount = 0, oldCount = 0;
-        int b;
-        while ((b = fs.ReadByte()) >= 0)
+        while (true)
         {
-            window[filled % windowLen] = (byte)b;
-            filled++;
-            if (filled < windowLen) continue;
-            int lastIdx = (filled - 1) % windowLen;
-            if (EndsWith(window, lastIdx, newBuf)) newCount++;
-            else if (EndsWith(window, lastIdx, oldBuf)) oldCount++;
+            int total = tail;
+            int read;
+            while (total < buf.Length && (read = stream.Read(buf, total, buf.Length - total)) > 0)
+                total += read;
+            if (total == 0) break;
+
+            var span = buf.AsSpan(0, total);
+            int i = 0;
+            while (i < total)
+            {
+                var rest = span.Slice(i);
+                int rn = rest.IndexOf(NewBytes);
+                int ro = rest.IndexOf(OldBytes);
+                if (rn < 0 && ro < 0) break;
+                if (ro < 0 || (rn >= 0 && rn <= ro))
+                {
+                    newCount++;
+                    i += rn + NewBytes.Length;
+                }
+                else
+                {
+                    oldCount++;
+                    i += ro + OldBytes.Length;
+                }
+            }
+
+            if (total < buf.Length) break; // EOF
+            tail = overlap;
+            Buffer.BlockCopy(buf, total - tail, buf, 0, tail);
         }
         return (newCount, oldCount);
-    }
-
-    /// <summary>True when the ring buffer <paramref name="window"/> ends with
-    /// <paramref name="needle"/>; <paramref name="lastIdx"/> is the ring index
-    /// of the most recent byte.</summary>
-    private static bool EndsWith(byte[] window, int lastIdx, byte[] needle)
-    {
-        int len = window.Length;
-        for (int i = 0; i < len; i++)
-        {
-            int idx = (lastIdx + 1 + i - len) % len;
-            if (idx < 0) idx += len;
-            if (window[idx] != needle[i]) return false;
-        }
-        return true;
     }
 
     public delegate void LogFn(string message);
@@ -132,7 +145,7 @@ public static class BinaryPatcher
             {
                 try
                 {
-                    switch (PatchOne(bin))
+                    switch (Swap(bin, OldName, NewName))
                     {
                         case Result.Replaced:
                             patched++;
@@ -192,62 +205,78 @@ public static class BinaryPatcher
         return (restored, failed);
     }
 
-    private enum Result { Replaced, Already, NotFound }
+    internal enum Result { Replaced, Already, NotFound }
 
-    private static Result PatchOne(string path) => Swap(path, OldName, NewName);
-
-    private static Result Swap(string path, string from, string to)
+    internal static Result Swap(string path, string from, string to)
     {
         if (from.Length != to.Length) throw new InvalidOperationException("length must match");
-        var data = File.ReadAllBytes(path);
-        int replaced = ReplaceAll(data, from, to);
-        if (replaced == 0)
-            return CountOf(data, to) > 0 ? Result.Already : Result.NotFound;
-        WriteWithRetry(path, data);
-        return Result.Replaced;
+        var offsets = ScanOffsets(path, from, out bool hasOther);
+        if (offsets.Count > 0)
+        {
+            WriteAt(path, offsets, to);
+            return Result.Replaced;
+        }
+        return hasOther ? Result.Already : Result.NotFound;
     }
 
-    private static int ReplaceAll(byte[] data, string from, string to)
+    /// <summary>One streamed pass collecting absolute offsets of every
+    /// <paramref name="from"/> occurrence; <paramref name="hasOther"/> reports
+    /// whether the opposite name is present anywhere (Already detection).</summary>
+    private static List<long> ScanOffsets(string path, string from, out bool hasOther)
     {
-        var f = Encoding.ASCII.GetBytes(from);
-        var t = Encoding.ASCII.GetBytes(to);
-        int count = 0, i = 0;
-        while (i + f.Length <= data.Length)
+        var fromBytes = Encoding.ASCII.GetBytes(from);
+        var otherBytes = from == OldName ? NewBytes : OldBytes;
+
+        hasOther = false;
+        var offsets = new List<long>();
+
+        using var fs = File.OpenRead(path);
+        const int ChunkSize = 1 << 20;
+        int overlap = fromBytes.Length - 1;
+        var buf = new byte[ChunkSize + overlap];
+        int tail = 0;
+        long baseOffset = 0;
+        while (true)
         {
-            bool hit = true;
-            for (int j = 0; j < f.Length; j++)
-                if (data[i + j] != f[j]) { hit = false; break; }
-            if (hit)
+            int total = tail;
+            int read;
+            while (total < buf.Length && (read = fs.Read(buf, total, buf.Length - total)) > 0)
+                total += read;
+            if (total == 0) break;
+
+            var span = buf.AsSpan(0, total);
+            int i = 0;
+            while (i < total)
             {
-                Array.Copy(t, 0, data, i, t.Length);
-                count++;
-                i += f.Length;
+                var rest = span.Slice(i);
+                int rf = rest.IndexOf(fromBytes);
+                int ro = rest.IndexOf(otherBytes);
+                if (rf < 0 && ro < 0) break;
+                if (ro < 0 || (rf >= 0 && rf <= ro))
+                {
+                    offsets.Add(baseOffset + i + rf);
+                    i += rf + fromBytes.Length;
+                }
+                else
+                {
+                    hasOther = true;
+                    i += ro + otherBytes.Length;
+                }
             }
-            else i++;
+
+            if (total < buf.Length) break; // EOF
+            baseOffset += total - tail;
+            tail = overlap;
+            Buffer.BlockCopy(buf, total - tail, buf, 0, tail);
         }
-        return count;
+        return offsets;
     }
 
-    private static int CountOf(byte[] data, string s)
-    {
-        var n = Encoding.ASCII.GetBytes(s);
-        int count = 0;
-        for (int i = 0; i + n.Length <= data.Length; i++)
-        {
-            bool hit = true;
-            for (int j = 0; j < n.Length; j++)
-                if (data[i + j] != n[j]) { hit = false; break; }
-            if (hit) count++;
-        }
-        return count;
-    }
-
-    private static void WriteWithRetry(string path, byte[] data)
+    private static void WriteAt(string path, List<long> offsets, string to)
     {
         try
         {
-            File.WriteAllBytes(path, data);
-            return;
+            WriteCore(path, offsets, to);
         }
         catch (IOException)
         {
@@ -257,6 +286,17 @@ public static class BinaryPatcher
         using (Process.Start(new ProcessStartInfo("taskkill", $"/F /IM \"{name}\"")
                { CreateNoWindow = true, UseShellExecute = false })) { }
         Thread.Sleep(800);
-        File.WriteAllBytes(path, data);
+        WriteCore(path, offsets, to);
+    }
+
+    private static void WriteCore(string path, List<long> offsets, string to)
+    {
+        var bytes = Encoding.ASCII.GetBytes(to);
+        using var fs = File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        foreach (var off in offsets)
+        {
+            fs.Seek(off, SeekOrigin.Begin);
+            fs.Write(bytes);
+        }
     }
 }
