@@ -1,6 +1,6 @@
 <div align="center">
 
-# AgVpsUnlock
+# AG Unlock Client
 
 **Antigravity работает. Где угодно.**
 
