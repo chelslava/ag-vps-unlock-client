@@ -54,7 +54,7 @@ public sealed class MainForm : Form
         DoubleBuffered = true;
 
         BuildUi();
-        RefreshAll();
+        _ = RefreshAllAsync();
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -222,10 +222,10 @@ public sealed class MainForm : Form
             BackColor = WindowBack,
             Padding = new Padding(18, 6, 18, 12)
         };
-        _applyBtn = MkBtn("Применить патч", ApplyPatch,
+        _applyBtn = MkBtn("Применить патч", ApplyPatchAsync,
             Success, Color.FromArgb(0x10, 0x1B, 0x15),
             Color.FromArgb(0x92, 0xD6, 0xA8), Color.FromArgb(0x6E, 0xB7, 0x85));
-        _rollbackBtn = MkOutlinedBtn("Полный откат", RollbackAll,
+        _rollbackBtn = MkOutlinedBtn("Полный откат", RollbackAllAsync,
             CardBack, Danger,
             Color.FromArgb(0x3A, 0x28, 0x2B), Color.FromArgb(0x2E, 0x21, 0x24));
         actions.Controls.Add(_applyBtn);
@@ -347,6 +347,9 @@ public sealed class MainForm : Form
     private Button MkOutlinedBtn(string text, Action onClick, Color back, Color fore, Color hover, Color pressed)
         => MkBtnCore(text, () => { onClick(); return Task.CompletedTask; }, back, fore, hover, pressed, border: fore);
 
+    private Button MkOutlinedBtn(string text, Func<Task> onClick, Color back, Color fore, Color hover, Color pressed)
+        => MkBtnCore(text, onClick, back, fore, hover, pressed, border: fore);
+
     private Button MkBtnCore(string text, Func<Task> onClick, Color back, Color fore, Color hover, Color pressed, Color? border)
     {
         var b = new Button
@@ -434,34 +437,70 @@ public sealed class MainForm : Form
         _log.AppendText($"[{DateTime.Now:HH:mm:ss}] {msg}\r\n");
     }
 
-    private void RefreshAll()
+    private bool _refreshing;
+
+    /// <summary>Scans installs and hosts state off the UI thread; safe to fire
+    /// from the constructor (placeholder row until the scan lands).</summary>
+    private async Task RefreshAllAsync()
     {
-        _installsList.Items.Clear();
-        var installs = BinaryPatcher.FindInstalls();
-        if (installs.Count == 0)
+        if (_refreshing) return;
+        _refreshing = true;
+        try
         {
-            _installsList.Items.Add("Antigravity не найдена");
+            _installsList.BeginUpdate();
+            _installsList.Items.Clear();
+            _installsList.Items.Add("Сканирование установок...");
             _applyBtn.Enabled = _rollbackBtn.Enabled = false;
-            return;
-        }
-        _applyBtn.Enabled = _rollbackBtn.Enabled = true;
-        foreach (var inst in installs)
-        {
-            foreach (var bin in inst.Binaries)
+            _installsList.EndUpdate();
+
+            var data = await Task.Run(() =>
             {
-                var st = BinaryPatcher.Inspect(bin) switch
-                {
-                    BinaryPatcher.BinaryState.Patched => "пропатчен",
-                    BinaryPatcher.BinaryState.Unpatched => "НЕ пропатчен",
-                    _ => "НОВАЯ ВЕРСИЯ?"
-                };
-                _installsList.Items.Add($"{st,-13} {bin}");
+                var rows = new List<(string Status, string Bin)>();
+                foreach (var inst in BinaryPatcher.FindInstalls())
+                    foreach (var bin in inst.Binaries)
+                    {
+                        var st = BinaryPatcher.Inspect(bin) switch
+                        {
+                            BinaryPatcher.BinaryState.Patched => "пропатчен",
+                            BinaryPatcher.BinaryState.Unpatched => "НЕ пропатчен",
+                            _ => "НОВАЯ ВЕРСИЯ?"
+                        };
+                        rows.Add((st, bin));
+                    }
+
+                bool hostsApplied = HostsManager.IsApplied();
+                int hostsCount = hostsApplied ? HostsManager.CurrentEntries().Count : 0;
+                return (Rows: rows, HostsApplied: hostsApplied, HostsCount: hostsCount);
+            });
+
+            _installsList.BeginUpdate();
+            _installsList.Items.Clear();
+            if (data.Rows.Count == 0)
+            {
+                _installsList.Items.Add("Antigravity не найдена");
+                _applyBtn.Enabled = _rollbackBtn.Enabled = false;
             }
+            else
+            {
+                _applyBtn.Enabled = _rollbackBtn.Enabled = true;
+                foreach (var (status, bin) in data.Rows)
+                    _installsList.Items.Add($"{status,-13} {bin}");
+            }
+            _installsList.EndUpdate();
+
+            if (data.HostsApplied)
+                SetStatus(_hostsLabel, Success, $"✓ hosts: закреплено ({data.HostsCount} имён)");
+            else
+                SetStatus(_hostsLabel, TextSecondary, "• hosts: блока нет");
         }
-        if (HostsManager.IsApplied())
-            SetStatus(_hostsLabel, Success, $"✓ hosts: закреплено ({HostsManager.CurrentEntries().Count} имён)");
-        else
-            SetStatus(_hostsLabel, TextSecondary, "• hosts: блока нет");
+        catch (Exception ex)
+        {
+            Log($"[!!] Ошибка обновления состояния: {ex.Message}");
+        }
+        finally
+        {
+            _refreshing = false;
+        }
     }
 
     private void SaveConfig()
@@ -549,7 +588,7 @@ public sealed class MainForm : Form
         Process.GetProcessesByName("agy").Length > 0 ||
         Process.GetProcessesByName("language_server").Length > 0;
 
-    private void ApplyPatch()
+    private async Task ApplyPatchAsync()
     {
         var ip = _ipBox.Text.Trim();
         if (!IPAddress.TryParse(ip, out var addr))
@@ -571,20 +610,23 @@ public sealed class MainForm : Form
         UseWaitCursor = true;
         try
         {
-            Log($"Патчим на сервер {ip}...");
-            Log("Завершаем процессы Antigravity...");
-            KillAntigravityProcesses();
+            await Task.Run(() =>
+            {
+                Log($"Патчим на сервер {ip}...");
+                Log("Завершаем процессы Antigravity...");
+                KillAntigravityProcesses();
 
-            Log("Патчим бинарники...");
-            var (patched, already, failed) = BinaryPatcher.ApplyAll(Log);
+                Log("Патчим бинарники...");
+                var (patched, already, failed) = BinaryPatcher.ApplyAll(Log);
 
-            Log("Закрепляем имена в hosts за сервером...");
-            var ok = HostsManager.Apply(_config.RoutedHosts(), addr);
-            Log(ok ? "[OK] hosts обновлён" : "[!!] не удалось записать hosts (нужны права администратора)");
+                Log("Закрепляем имена в hosts за сервером...");
+                var ok = HostsManager.Apply(_config.RoutedHosts(), addr);
+                Log(ok ? "[OK] hosts обновлён" : "[!!] не удалось записать hosts (нужны права администратора)");
 
-            Log($"\nГотово. Патчей: {patched}, уже было: {already}, ошибок: {failed}.");
-            Log("Запустите Antigravity и войдите в аккаунт Google.");
-            RefreshAll();
+                Log($"\nГотово. Патчей: {patched}, уже было: {already}, ошибок: {failed}.");
+                Log("Запустите Antigravity и войдите в аккаунт Google.");
+            });
+            await RefreshAllAsync();
         }
         finally
         {
@@ -592,7 +634,7 @@ public sealed class MainForm : Form
         }
     }
 
-    private void RollbackAll()
+    private async Task RollbackAllAsync()
     {
         if (MessageBox.Show(
                 "Будут восстановлены исходные бинарники Antigravity и удалён hosts-блок. Процессы Antigravity будут закрыты. Продолжить?",
@@ -604,13 +646,16 @@ public sealed class MainForm : Form
         UseWaitCursor = true;
         try
         {
-            Log("Возвращаем бинарники к исходному состоянию...");
-            KillAntigravityProcesses();
-            var (restored, failed) = BinaryPatcher.RestoreAll(Log);
-            var hostsOk = HostsManager.Remove();
-            Log(hostsOk ? "[OK] hosts-блок удалён" : "[!!] не удалось изменить hosts");
-            Log($"\nОткат завершён. Восстановлено: {restored}, ошибок: {failed}.");
-            RefreshAll();
+            await Task.Run(() =>
+            {
+                Log("Возвращаем бинарники к исходному состоянию...");
+                KillAntigravityProcesses();
+                var (restored, failed) = BinaryPatcher.RestoreAll(Log);
+                var hostsOk = HostsManager.Remove();
+                Log(hostsOk ? "[OK] hosts-блок удалён" : "[!!] не удалось изменить hosts");
+                Log($"\nОткат завершён. Восстановлено: {restored}, ошибок: {failed}.");
+            });
+            await RefreshAllAsync();
         }
         finally
         {
@@ -620,15 +665,10 @@ public sealed class MainForm : Form
 
     private static void KillAntigravityProcesses()
     {
-        foreach (var name in new[]
-                 {
-                     "Antigravity", "Antigravity IDE", "Antigravity CLI",
-                     "agy", "language_server", "language_server_windows_x64"
-                 })
-        {
-            using var p = Process.Start(new ProcessStartInfo("taskkill", $"/F /IM \"{name}.exe\"")
-            { CreateNoWindow = true, UseShellExecute = false });
-            p?.WaitForExit(3000);
-        }
+        using var p = Process.Start(new ProcessStartInfo("taskkill",
+            "/F /IM \"Antigravity.exe\" /IM \"Antigravity IDE.exe\" /IM \"Antigravity CLI.exe\"" +
+            " /IM \"agy.exe\" /IM \"language_server.exe\" /IM \"language_server_windows_x64.exe\"")
+        { CreateNoWindow = true, UseShellExecute = false });
+        p?.WaitForExit(5000);
     }
 }
