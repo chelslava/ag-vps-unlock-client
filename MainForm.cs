@@ -361,7 +361,8 @@ public sealed class MainForm : Form
             UseVisualStyleBackColor = false
         };
         b.FlatAppearance.BorderSize = border is null ? 0 : 1;
-        b.FlatAppearance.BorderColor = border ?? Color.Transparent;
+        if (border is not null)
+            b.FlatAppearance.BorderColor = border.Value;
         b.FlatAppearance.MouseOverBackColor = hover;
         b.FlatAppearance.MouseDownBackColor = pressed;
         b.EnabledChanged += (_, _) =>
