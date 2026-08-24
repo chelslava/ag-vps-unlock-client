@@ -5,7 +5,7 @@
 <br>
 
 <a href="https://t.me/AGUnlock_bot">
-<img src="https://img.shields.io/badge/Купить_подписку-2AABEE?style=for-the-badge&logo=telegram&logoColor=white" alt="Купить через Telegram бота" height="52">
+<img src="assets/buy-button.svg" alt="Купить подписку через Telegram бота" width="360">
 </a>
 
 <br>
