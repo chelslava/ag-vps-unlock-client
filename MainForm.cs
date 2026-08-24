@@ -328,6 +328,7 @@ public sealed class MainForm : Form
         using (var bg = new SolidBrush(selected ? SelectionBack : CardBack))
             e.Graphics.FillRectangle(bg, e.Bounds);
         var color =
+            text.StartsWith("НОВАЯ", StringComparison.Ordinal) ? Warning :
             text.StartsWith("пропатчен", StringComparison.Ordinal) ? Success :
             text.StartsWith("НЕ", StringComparison.Ordinal) ? Danger :
             text.StartsWith("Antigravity", StringComparison.Ordinal) ? TextSecondary :
@@ -452,7 +453,7 @@ public sealed class MainForm : Form
                 {
                     BinaryPatcher.BinaryState.Patched => "пропатчен",
                     BinaryPatcher.BinaryState.Unpatched => "НЕ пропатчен",
-                    _ => "неизвестно"
+                    _ => "НОВАЯ ВЕРСИЯ?"
                 };
                 _installsList.Items.Add($"{st,-13} {bin}");
             }
