@@ -1,23 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="360" height="72" xmlns:xlink="http://www.w3.org/1999/xlink">
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="36">
   <defs>
-    <linearGradient id="tg" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#2AABEE"/>
       <stop offset="100%" stop-color="#229ED9"/>
     </linearGradient>
-    <filter id="glow" x="-20%" y="-30%" width="140%" height="180%">
-      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#2AABEE" flood-opacity="0.45"/>
-    </filter>
   </defs>
-  <rect x="2" y="2" width="356" height="68" rx="36" fill="url(#tg)" filter="url(#glow)"/>
-  <rect x="2" y="2" width="356" height="34" rx="34" fill="#ffffff" opacity="0.08"/>
-  <!-- Telegram plane icon -->
-  <g transform="translate(28, 20)">
-    <path d="M 30 2 L 2 14 L 10 18 L 12 28 L 17 21 L 24 26 Z" fill="#ffffff" opacity="0.95"/>
-    <path d="M 10 18 L 24 26 L 30 2" fill="#d0e8f8" opacity="0.7"/>
+  <rect width="180" height="36" rx="18" fill="url(#g)"/>
+  <!-- Telegram plane -->
+  <g transform="translate(14, 10)">
+    <path d="M 14 1 L 1 7 L 5 9 L 6 13 L 8 10 L 11 12 Z" fill="#ffffff"/>
   </g>
   <!-- Text -->
-  <text x="82" y="36" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff" letter-spacing="0.5">Купить подписку</text>
-  <text x="82" y="56" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#c8ecff" opacity="0.85">нажмите, чтобы оформить</text>
-  <!-- Arrow -->
-  <path d="M 322 32 L 336 36 L 322 40" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+  <text x="34" y="23" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#ffffff">Купить подписку</text>
 </svg>
