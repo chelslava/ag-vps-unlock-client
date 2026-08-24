@@ -1,8 +1,6 @@
 <div align="center">
 
-# AG Unlock Client
-
-**Antigravity работает. Где угодно.**
+<img src="assets/banner.jpg" alt="AG Unlock Client — Antigravity работает. Где угодно." width="100%">
 
 <br>
 
