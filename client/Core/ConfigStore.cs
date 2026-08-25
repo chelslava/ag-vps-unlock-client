@@ -13,6 +13,8 @@ public sealed class ConfigStore
     /// <summary>Extra hostnames to route, when the upstream product grows new
     /// endpoints. The core four are always included.</summary>
     public List<string> ExtraHosts { get; set; } = new();
+    /// <summary>Custom Antigravity directory or executable paths provided by the user.</summary>
+    public List<string> CustomInstallPaths { get; set; } = new();
 
     private static string Dir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),

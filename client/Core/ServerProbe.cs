@@ -51,14 +51,17 @@ public static class ServerProbe
 
         void Report(string msg) => progress?.Report(msg);
 
+        var hostList = routedHosts?.ToList();
+        var targetHost = hostList?.FirstOrDefault(h => !string.IsNullOrWhiteSpace(h)) ?? "cloudcode-pa.googleapis.com";
+
         Report($"TCP/TLS {ip}:443…");
-        var tlsTask = ProbeTlsAsync(addr, ct, Report);
+        var tlsTask = ProbeTlsAsync(addr, targetHost, ct, Report);
 
         Report("UDP/53…");
         var udpTask = ProbeUdpDnsAsync(addr, ct);
 
         Report("Резолв routed-имён…");
-        var resolveTask = ResolveAll(routedHosts, ct);
+        var resolveTask = ResolveAll(hostList, ct);
 
         await Task.WhenAll(tlsTask, udpTask, resolveTask);
 
@@ -72,7 +75,7 @@ public static class ServerProbe
     }
 
     private static async Task<(bool TcpOk, bool TlsOk, string? Subject, string? Error)> ProbeTlsAsync(
-        IPAddress addr, CancellationToken ct, Action<string> report)
+        IPAddress addr, string targetHost, CancellationToken ct, Action<string> report)
     {
         bool tcpOk = false;
         var probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -90,7 +93,7 @@ public static class ServerProbe
             using var ssl = new SslStream(client.GetStream(), false);
             await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
             {
-                TargetHost = "daily-cloudcode-pa.googleapis.com"
+                TargetHost = targetHost
             }, probeCts.Token);
             var subject = ssl.RemoteCertificate?.Subject;
 
@@ -194,7 +197,7 @@ public static class ServerProbe
         var parts = bad.Concat(unresolved).ToList();
         return parts.Count == 0
             ? (false, null)
-            : (bad.Count > 0, string.Join("; ", parts));
+            : (true, string.Join("; ", parts));
     }
 
     internal static byte[] BuildQuery(string name, ushort txId)

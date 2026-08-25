@@ -103,6 +103,22 @@ public class ServerProbeTests
         Assert.Null(detail);
     }
 
+    [Fact]
+    public void DetectLeak_FlagsWhenOnlyUnresolvedHostsPresent()
+    {
+        var vps = IPAddress.Parse("1.2.3.4");
+        var resolved = new List<HostResolve>
+        {
+            new("ok.com", [vps]),
+            new("unresolved.com", [])
+        };
+        var (leak, detail) = ServerProbe.DetectLeak(resolved, vps);
+
+        Assert.True(leak);
+        Assert.NotNull(detail);
+        Assert.Contains("unresolved.com: имя не резолвится", detail);
+    }
+
     private static byte[] Header(byte idHi, byte idLo, byte flagsHi, byte flagsLo) =>
         [idHi, idLo, flagsHi, flagsLo, 0x00, 0x01, 0x00, 0x01, 0, 0, 0, 0];
 

@@ -65,6 +65,22 @@ public class BinaryPatcherTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void FindInstalls_IncludesCustomDirectBinary()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), "custom_language_server.exe");
+        try
+        {
+            File.WriteAllBytes(tempFile, Encoding.ASCII.GetBytes("dummy"));
+            var installs = BinaryPatcher.FindInstalls([tempFile]);
+            Assert.Contains(installs, i => i.Binaries.Contains(tempFile));
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
 }
 
 /// <summary>Serves reads in small pieces to force the chunk-boundary logic.</summary>

@@ -1,36 +1,14 @@
 using System.Diagnostics;
-using System.Drawing.Drawing2D;
 using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using AgVpsUnlock.Core;
+using AgVpsUnlock.UI;
 
 namespace AgVpsUnlock;
 
 public sealed class MainForm : Form
 {
-    private static readonly Color WindowBack = Color.FromArgb(0x1B, 0x1D, 0x23);
-    private static readonly Color CardBack = Color.FromArgb(0x23, 0x26, 0x2E);
-    private static readonly Color BorderColor = Color.FromArgb(0x31, 0x35, 0x3F);
-    private static readonly Color InputBack = Color.FromArgb(0x15, 0x17, 0x1C);
-    private static readonly Color LogBack = Color.FromArgb(0x15, 0x17, 0x1C);
-    private static readonly Color TextPrimary = Color.FromArgb(0xE8, 0xEA, 0xED);
-    private static readonly Color TextSecondary = Color.FromArgb(0x9A, 0xA0, 0xA6);
-    private static readonly Color Accent = Color.FromArgb(0x7A, 0xA2, 0xF7);
-    private static readonly Color Success = Color.FromArgb(0x81, 0xC9, 0x95);
-    private static readonly Color Warning = Color.FromArgb(0xFD, 0xD6, 0x63);
-    private static readonly Color Danger = Color.FromArgb(0xF2, 0x8B, 0x82);
-    private static readonly Color SecondaryBtnBack = Color.FromArgb(0x2A, 0x2E, 0x38);
-    private static readonly Color DisabledBack = Color.FromArgb(0x22, 0x25, 0x2D);
-    private static readonly Color DisabledFore = Color.FromArgb(0x5A, 0x5F, 0x69);
-    private static readonly Color SelectionBack = Color.FromArgb(0x2E, 0x33, 0x40);
-
-    private static readonly Font BaseFont = new("Segoe UI", 9.75f);
-    private static readonly Font TitleFont = new("Segoe UI Semibold", 15f);
-    private static readonly Font CardHeaderFont = new("Segoe UI Semibold", 11f);
-    private static readonly Font CaptionFont = new("Segoe UI", 8.25f);
-    private static readonly Font MonoFont = new("Consolas", 9f);
-
     private readonly ConfigStore _config = ConfigStore.Load();
 
     private TextBox _ipBox = null!;
@@ -52,17 +30,17 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        var infoVer = System.Reflection.Assembly.GetEntryAssembly()?
-            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?
+        var infoVer = Assembly.GetEntryAssembly()?
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
             .InformationalVersion;
         var shortVer = infoVer?.Split('+')[0];
         Text = "Antigravity VPS Unlock" + (string.IsNullOrEmpty(shortVer) ? "" : $"  v{shortVer}");
-        Font = (Font)BaseFont.Clone();
-        BackColor = WindowBack;
-        ForeColor = TextPrimary;
+        Font = (Font)AppTheme.BaseFont.Clone();
+        BackColor = AppTheme.WindowBack;
+        ForeColor = AppTheme.TextPrimary;
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(820, 600);
-        Size = new Size(900, 680);
+        MinimumSize = new Size(840, 620);
+        Size = new Size(920, 700);
         DoubleBuffered = true;
 
         BuildUi();
@@ -94,7 +72,7 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Top,
             AutoSize = true,
-            BackColor = WindowBack,
+            BackColor = AppTheme.WindowBack,
             Padding = new Padding(18, 14, 18, 10)
         };
         var subtitle = new Label
@@ -102,7 +80,7 @@ public sealed class MainForm : Form
             Text = "Безопасный доступ к Antigravity из любого региона",
             AutoSize = true,
             Dock = DockStyle.Top,
-            ForeColor = TextSecondary,
+            ForeColor = AppTheme.TextSecondary,
             Font = new Font("Segoe UI", 9f)
         };
         var title = new Label
@@ -110,8 +88,8 @@ public sealed class MainForm : Form
             Text = "Antigravity VPS Unlock",
             AutoSize = true,
             Dock = DockStyle.Top,
-            ForeColor = TextPrimary,
-            Font = (Font)TitleFont.Clone(),
+            ForeColor = AppTheme.TextPrimary,
+            Font = (Font)AppTheme.TitleFont.Clone(),
             Padding = new Padding(0, 0, 0, 4)
         };
         _summaryLabel = new Label
@@ -119,7 +97,7 @@ public sealed class MainForm : Form
             Text = "",
             AutoSize = true,
             Dock = DockStyle.Top,
-            ForeColor = TextSecondary,
+            ForeColor = AppTheme.TextSecondary,
             Font = new Font("Segoe UI", 9.5f),
             Padding = new Padding(0, 6, 0, 0)
         };
@@ -132,7 +110,7 @@ public sealed class MainForm : Form
             Dock = DockStyle.Top,
             AutoSize = true,
             WrapContents = false,
-            BackColor = WindowBack,
+            BackColor = AppTheme.WindowBack,
             Padding = new Padding(18, 4, 18, 14)
         };
 
@@ -140,16 +118,16 @@ public sealed class MainForm : Form
         {
             Text = "IP сервера (VPS):",
             AutoSize = true,
-            ForeColor = TextSecondary,
+            ForeColor = AppTheme.TextSecondary,
             Margin = new Padding(0, 10, 12, 0)
         };
         _ipBox = new TextBox
         {
             BorderStyle = BorderStyle.None,
-            BackColor = InputBack,
-            ForeColor = TextPrimary,
+            BackColor = AppTheme.InputBack,
+            ForeColor = AppTheme.TextPrimary,
             Width = 212,
-            Font = (Font)BaseFont.Clone(),
+            Font = (Font)AppTheme.BaseFont.Clone(),
             Text = _config.VpsIp,
             PlaceholderText = "например, 203.0.113.10"
         };
@@ -158,13 +136,13 @@ public sealed class MainForm : Form
             Width = 216,
             Height = _ipBox.Height + 4,
             Padding = new Padding(1, 2, 1, 2),
-            BackColor = BorderColor,
+            BackColor = AppTheme.BorderColor,
             Margin = new Padding(0, 5, 14, 0)
         };
         _ipBox.Dock = DockStyle.Fill;
         _ipBox.TextChanged += (_, _) => _probeLabel.Text = "";
-        _ipBox.GotFocus += (_, _) => ipHost.BackColor = Accent;
-        _ipBox.LostFocus += (_, _) => ipHost.BackColor = BorderColor;
+        _ipBox.GotFocus += (_, _) => ipHost.BackColor = AppTheme.Accent;
+        _ipBox.LostFocus += (_, _) => ipHost.BackColor = AppTheme.BorderColor;
         _ipBox.KeyDown += (_, ev) =>
         {
             if (ev.KeyCode != Keys.Enter || !_probeBtn.Enabled) return;
@@ -173,12 +151,12 @@ public sealed class MainForm : Form
         };
         ipHost.Controls.Add(_ipBox);
 
-        _saveBtn = MkBtn("Сохранить", SaveConfig,
-            SecondaryBtnBack, TextPrimary,
-            Color.FromArgb(0x34, 0x39, 0x45), Color.FromArgb(0x22, 0x26, 0x30));
-        _probeBtn = MkBtn("Проверить сервер", ProbeAsync,
-            Accent, Color.FromArgb(0x0F, 0x14, 0x22),
-            Color.FromArgb(0x92, 0xB4, 0xF9), Color.FromArgb(0x69, 0x93, 0xEB));
+        _saveBtn = AppTheme.CreateButton("Сохранить", SaveConfig,
+            AppTheme.SecondaryBtnBack, AppTheme.TextPrimary,
+            Color.FromArgb(0x34, 0x39, 0x45), Color.FromArgb(0x22, 0x26, 0x30), onLog: Log);
+        _probeBtn = AppTheme.CreateButton("Проверить сервер", ProbeAsync,
+            AppTheme.Accent, Color.FromArgb(0x0F, 0x14, 0x22),
+            Color.FromArgb(0x92, 0xB4, 0xF9), Color.FromArgb(0x69, 0x93, 0xEB), onLog: Log);
 
         ipRow.Controls.Add(ipCaption);
         ipRow.Controls.Add(ipHost);
@@ -190,23 +168,23 @@ public sealed class MainForm : Form
             Dock = DockStyle.Top,
             AutoSize = true,
             WrapContents = false,
-            BackColor = WindowBack,
+            BackColor = AppTheme.WindowBack,
             Padding = new Padding(18, 0, 18, 10)
         };
         var tokCaption = new Label
         {
             Text = "Токен доступа:",
             AutoSize = true,
-            ForeColor = TextSecondary,
+            ForeColor = AppTheme.TextSecondary,
             Margin = new Padding(0, 8, 12, 0)
         };
         _tokenBox = new TextBox
         {
             BorderStyle = BorderStyle.None,
-            BackColor = InputBack,
-            ForeColor = TextPrimary,
+            BackColor = AppTheme.InputBack,
+            ForeColor = AppTheme.TextPrimary,
             Width = 320,
-            Font = (Font)BaseFont.Clone(),
+            Font = (Font)AppTheme.BaseFont.Clone(),
             Text = _config.VpsToken,
             PlaceholderText = "выдаётся вместе с подпиской"
         };
@@ -215,12 +193,12 @@ public sealed class MainForm : Form
             Width = 324,
             Height = _tokenBox.Height + 4,
             Padding = new Padding(1, 2, 1, 2),
-            BackColor = BorderColor,
+            BackColor = AppTheme.BorderColor,
             Margin = new Padding(0, 5, 14, 0)
         };
         _tokenBox.Dock = DockStyle.Fill;
-        _tokenBox.GotFocus += (_, _) => tokHost.BackColor = Accent;
-        _tokenBox.LostFocus += (_, _) => tokHost.BackColor = BorderColor;
+        _tokenBox.GotFocus += (_, _) => tokHost.BackColor = AppTheme.Accent;
+        _tokenBox.LostFocus += (_, _) => tokHost.BackColor = AppTheme.BorderColor;
         tokHost.Controls.Add(_tokenBox);
         tokenRow.Controls.Add(tokCaption);
         tokenRow.Controls.Add(tokHost);
@@ -228,7 +206,7 @@ public sealed class MainForm : Form
         var mid = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            BackColor = WindowBack,
+            BackColor = AppTheme.WindowBack,
             ColumnCount = 2,
             RowCount = 1,
             Padding = new Padding(18, 2, 18, 2)
@@ -238,26 +216,55 @@ public sealed class MainForm : Form
 
         var installsCard = NewCard("Установки", out var installsBody);
         installsCard.Margin = new Padding(0, 0, 5, 0);
+
+        var installsHeaderTools = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            AutoSize = true,
+            BackColor = AppTheme.CardBack,
+            Padding = new Padding(0, 6, 0, 0)
+        };
+        var addPathLink = new LinkLabel
+        {
+            Text = "+ Указать путь вручную...",
+            AutoSize = true,
+            LinkColor = AppTheme.Accent,
+            LinkBehavior = LinkBehavior.HoverUnderline,
+            Margin = new Padding(0, 0, 12, 0)
+        };
+        addPathLink.Click += (_, _) => AddCustomPathDialog();
+        var clearPathsLink = new LinkLabel
+        {
+            Text = "Сбросить кастомные пути",
+            AutoSize = true,
+            LinkColor = AppTheme.TextSecondary,
+            LinkBehavior = LinkBehavior.HoverUnderline
+        };
+        clearPathsLink.Click += (_, _) => ClearCustomPaths();
+        installsHeaderTools.Controls.Add(addPathLink);
+        installsHeaderTools.Controls.Add(clearPathsLink);
+
         _installsList = new ListBox
         {
             Dock = DockStyle.Fill,
             BorderStyle = BorderStyle.None,
-            BackColor = CardBack,
-            ForeColor = TextPrimary,
-            Font = (Font)MonoFont.Clone(),
+            BackColor = AppTheme.CardBack,
+            ForeColor = AppTheme.TextPrimary,
+            Font = (Font)AppTheme.MonoFont.Clone(),
             DrawMode = DrawMode.OwnerDrawFixed,
-            ItemHeight = Math.Max(18, MonoFont.Height + 6),
+            ItemHeight = Math.Max(18, AppTheme.MonoFont.Height + 6),
             IntegralHeight = false
         };
         _installsList.DrawItem += Installs_DrawItem;
         installsBody.Controls.Add(_installsList);
+        installsBody.Controls.Add(installsHeaderTools);
 
         var stateCard = NewCard("Состояние", out var stateBody);
         stateCard.Margin = new Padding(5, 0, 0, 0);
         var stateGrid = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            BackColor = CardBack,
+            BackColor = AppTheme.CardBack,
             ColumnCount = 1,
             RowCount = 3
         };
@@ -266,10 +273,10 @@ public sealed class MainForm : Form
         stateGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
         _hostsLabel = MakeStatusValue();
         _probeLabel = MakeStatusValue();
-        SetStatus(_hostsLabel, TextSecondary, "• нет данных");
-        SetStatus(_probeLabel, TextSecondary, "• ещё не проверялся");
+        SetStatus(_hostsLabel, AppTheme.TextSecondary, "• нет данных");
+        SetStatus(_probeLabel, AppTheme.TextSecondary, "• ещё не проверялся");
         stateGrid.Controls.Add(StatusCell("Файл hosts", _hostsLabel), 0, 0);
-        stateGrid.Controls.Add(new Panel { Dock = DockStyle.Fill, BackColor = BorderColor, Margin = Padding.Empty }, 0, 1);
+        stateGrid.Controls.Add(new Panel { Dock = DockStyle.Fill, BackColor = AppTheme.BorderColor, Margin = Padding.Empty }, 0, 1);
         stateGrid.Controls.Add(StatusCell("Проверка сервера", _probeLabel), 0, 2);
         stateBody.Controls.Add(stateGrid);
 
@@ -281,18 +288,18 @@ public sealed class MainForm : Form
             Dock = DockStyle.Top,
             AutoSize = true,
             WrapContents = false,
-            BackColor = WindowBack,
+            BackColor = AppTheme.WindowBack,
             Padding = new Padding(18, 6, 18, 12)
         };
-        _applyBtn = MkBtn("Применить патч", ApplyPatchAsync,
-            Success, Color.FromArgb(0x10, 0x1B, 0x15),
-            Color.FromArgb(0x92, 0xD6, 0xA8), Color.FromArgb(0x6E, 0xB7, 0x85));
-        _rollbackBtn = MkOutlinedBtn("Полный откат", RollbackAllAsync,
-            CardBack, Danger,
-            Color.FromArgb(0x3A, 0x28, 0x2B), Color.FromArgb(0x2E, 0x21, 0x24));
-        _refreshBtn = MkBtn("Обновить", () => _ = RefreshAllAsync(),
-            SecondaryBtnBack, TextSecondary,
-            Color.FromArgb(0x34, 0x39, 0x45), Color.FromArgb(0x22, 0x26, 0x30));
+        _applyBtn = AppTheme.CreateButton("Применить патч", ApplyPatchAsync,
+            AppTheme.Success, Color.FromArgb(0x10, 0x1B, 0x15),
+            Color.FromArgb(0x92, 0xD6, 0xA8), Color.FromArgb(0x6E, 0xB7, 0x85), onLog: Log);
+        _rollbackBtn = AppTheme.CreateButton("Полный откат", RollbackAllAsync,
+            AppTheme.CardBack, AppTheme.Danger,
+            Color.FromArgb(0x3A, 0x28, 0x2B), Color.FromArgb(0x2E, 0x21, 0x24), border: AppTheme.Danger, onLog: Log);
+        _refreshBtn = AppTheme.CreateButton("Обновить", () => _ = RefreshAllAsync(),
+            AppTheme.SecondaryBtnBack, AppTheme.TextSecondary,
+            Color.FromArgb(0x34, 0x39, 0x45), Color.FromArgb(0x22, 0x26, 0x30), onLog: Log);
         actions.Controls.Add(_applyBtn);
         actions.Controls.Add(_rollbackBtn);
         actions.Controls.Add(_refreshBtn);
@@ -300,7 +307,7 @@ public sealed class MainForm : Form
         var logHost = new Panel
         {
             Dock = DockStyle.Bottom,
-            BackColor = WindowBack,
+            BackColor = AppTheme.WindowBack,
             Padding = new Padding(18, 4, 18, 14),
             Height = 212
         };
@@ -312,23 +319,23 @@ public sealed class MainForm : Form
             TabStop = false,
             ScrollBars = ScrollBars.Vertical,
             BorderStyle = BorderStyle.None,
-            BackColor = LogBack,
-            ForeColor = TextPrimary,
-            Font = (Font)MonoFont.Clone()
+            BackColor = AppTheme.LogBack,
+            ForeColor = AppTheme.TextPrimary,
+            Font = (Font)AppTheme.MonoFont.Clone()
         };
         var logTools = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
             AutoSize = true,
             WrapContents = false,
-            BackColor = LogBack,
+            BackColor = AppTheme.LogBack,
             Padding = new Padding(2, 4, 2, 6)
         };
         var copyLink = new LinkLabel
         {
             Text = "Копировать всё",
             AutoSize = true,
-            LinkColor = Accent,
+            LinkColor = AppTheme.Accent,
             LinkBehavior = LinkBehavior.HoverUnderline,
             Margin = new Padding(0, 0, 16, 0)
         };
@@ -341,7 +348,7 @@ public sealed class MainForm : Form
         {
             Text = "Очистить",
             AutoSize = true,
-            LinkColor = Accent,
+            LinkColor = AppTheme.Accent,
             LinkBehavior = LinkBehavior.HoverUnderline
         };
         clearLink.Click += (_, _) => _log.Clear();
@@ -362,12 +369,42 @@ public sealed class MainForm : Form
         ResumeLayout(true);
     }
 
+    private void AddCustomPathDialog()
+    {
+        using var ofd = new OpenFileDialog
+        {
+            Title = "Выберите файл language_server.exe, agy.exe или Antigravity.exe",
+            Filter = "Исполняемые файлы (*.exe)|*.exe|Все файлы (*.*)|*.*",
+            CheckFileExists = true
+        };
+        if (ofd.ShowDialog(this) == DialogResult.OK)
+        {
+            var path = ofd.FileName;
+            if (!_config.CustomInstallPaths.Contains(path, StringComparer.OrdinalIgnoreCase))
+            {
+                _config.CustomInstallPaths.Add(path);
+                _config.Save();
+                Log($"Добавлен пользовательский путь: {path}");
+                _ = RefreshAllAsync();
+            }
+        }
+    }
+
+    private void ClearCustomPaths()
+    {
+        if (_config.CustomInstallPaths.Count == 0) return;
+        _config.CustomInstallPaths.Clear();
+        _config.Save();
+        Log("Пользовательские пути сброшены");
+        _ = RefreshAllAsync();
+    }
+
     private static CardPanel NewCard(string title, out Control body)
     {
         var card = new CardPanel
         {
             Dock = DockStyle.Fill,
-            BackColor = CardBack,
+            BackColor = AppTheme.CardBack,
             Padding = new Padding(14, 12, 14, 12)
         };
         var header = new Label
@@ -375,11 +412,11 @@ public sealed class MainForm : Form
             Text = title,
             AutoSize = true,
             Dock = DockStyle.Top,
-            ForeColor = TextPrimary,
-            Font = (Font)CardHeaderFont.Clone(),
+            ForeColor = AppTheme.TextPrimary,
+            Font = (Font)AppTheme.CardHeaderFont.Clone(),
             Padding = new Padding(2, 0, 0, 10)
         };
-        body = new Panel { Dock = DockStyle.Fill, BackColor = CardBack, Padding = new Padding(2) };
+        body = new Panel { Dock = DockStyle.Fill, BackColor = AppTheme.CardBack, Padding = new Padding(2) };
         card.Controls.Add(body);
         card.Controls.Add(header);
         return card;
@@ -390,7 +427,7 @@ public sealed class MainForm : Form
         var cell = new Panel
         {
             Dock = DockStyle.Fill,
-            BackColor = CardBack,
+            BackColor = AppTheme.CardBack,
             Padding = new Padding(2, 6, 6, 6)
         };
         var cap = new Label
@@ -398,8 +435,8 @@ public sealed class MainForm : Form
             Text = caption,
             Dock = DockStyle.Top,
             AutoSize = true,
-            ForeColor = TextSecondary,
-            Font = (Font)CaptionFont.Clone(),
+            ForeColor = AppTheme.TextSecondary,
+            Font = (Font)AppTheme.CaptionFont.Clone(),
             Padding = new Padding(0, 0, 0, 4)
         };
         cell.Controls.Add(value);
@@ -412,7 +449,7 @@ public sealed class MainForm : Form
         Dock = DockStyle.Fill,
         AutoSize = false,
         TextAlign = ContentAlignment.MiddleLeft,
-        ForeColor = TextSecondary
+        ForeColor = AppTheme.TextSecondary
     };
 
     private static void SetStatus(Label label, Color color, string text)
@@ -426,112 +463,19 @@ public sealed class MainForm : Form
         if (e.Index < 0 || e.Index >= _installsList.Items.Count) return;
         var text = _installsList.Items[e.Index].ToString() ?? "";
         bool selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
-        using (var bg = new SolidBrush(selected ? SelectionBack : CardBack))
+        using (var bg = new SolidBrush(selected ? AppTheme.SelectionBack : AppTheme.CardBack))
             e.Graphics.FillRectangle(bg, e.Bounds);
         var color =
-            text.StartsWith("НОВАЯ", StringComparison.Ordinal) ? Warning :
-            text.StartsWith("пропатчен", StringComparison.Ordinal) ? Success :
-            text.StartsWith("НЕ", StringComparison.Ordinal) ? Danger :
-            text.StartsWith("Antigravity", StringComparison.Ordinal) ? TextSecondary :
-            TextPrimary;
-        TextRenderer.DrawText(e.Graphics, text, e.Font ?? MonoFont,
-            new Point(e.Bounds.X + 2, e.Bounds.Y + 2), selected ? TextPrimary : color,
+            text.StartsWith("НОВАЯ", StringComparison.Ordinal) ? AppTheme.Warning :
+            text.StartsWith("пропатчен", StringComparison.Ordinal) ? AppTheme.Success :
+            text.StartsWith("НЕ", StringComparison.Ordinal) ? AppTheme.Danger :
+            text.StartsWith("Antigravity", StringComparison.Ordinal) ? AppTheme.TextSecondary :
+            AppTheme.TextPrimary;
+        TextRenderer.DrawText(e.Graphics, text, e.Font ?? AppTheme.MonoFont,
+            new Point(e.Bounds.X + 2, e.Bounds.Y + 2), selected ? AppTheme.TextPrimary : color,
             TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
         if ((e.State & DrawItemState.Focus) != 0)
             e.DrawFocusRectangle();
-    }
-
-    private Button MkBtn(string text, Action onClick, Color back, Color fore, Color hover, Color pressed)
-        => MkBtnCore(text, () => { onClick(); return Task.CompletedTask; }, back, fore, hover, pressed, border: null);
-
-    private Button MkBtn(string text, Func<Task> onClick, Color back, Color fore, Color hover, Color pressed)
-        => MkBtnCore(text, onClick, back, fore, hover, pressed, border: null);
-
-    private Button MkOutlinedBtn(string text, Action onClick, Color back, Color fore, Color hover, Color pressed)
-        => MkBtnCore(text, () => { onClick(); return Task.CompletedTask; }, back, fore, hover, pressed, border: fore);
-
-    private Button MkOutlinedBtn(string text, Func<Task> onClick, Color back, Color fore, Color hover, Color pressed)
-        => MkBtnCore(text, onClick, back, fore, hover, pressed, border: fore);
-
-    private Button MkBtnCore(string text, Func<Task> onClick, Color back, Color fore, Color hover, Color pressed, Color? border)
-    {
-        var b = new Button
-        {
-            Text = text,
-            AutoSize = true,
-            Cursor = Cursors.Hand,
-            FlatStyle = FlatStyle.Flat,
-            BackColor = back,
-            ForeColor = fore,
-            Padding = new Padding(12, 8, 12, 8),
-            Margin = new Padding(0, 0, 12, 0),
-            UseVisualStyleBackColor = false
-        };
-        b.FlatAppearance.BorderSize = border is null ? 0 : 1;
-        if (border is not null)
-            b.FlatAppearance.BorderColor = border.Value;
-        b.FlatAppearance.MouseOverBackColor = hover;
-        b.FlatAppearance.MouseDownBackColor = pressed;
-        b.EnabledChanged += (_, _) =>
-        {
-            if (b.Enabled) { b.BackColor = back; b.ForeColor = fore; }
-            else { b.BackColor = DisabledBack; b.ForeColor = DisabledFore; }
-        };
-        b.Click += async (_, _) =>
-        {
-            b.Enabled = false;
-            try { await onClick(); }
-            catch (Exception ex)
-            {
-                Log($"[!!] {ex.Message}");
-            }
-            finally
-            {
-                b.Enabled = true;
-            }
-        };
-        return b;
-    }
-
-    private sealed class CardPanel : Panel
-    {
-        private const int Radius = 8;
-
-        public CardPanel()
-        {
-            DoubleBuffered = true;
-            ResizeRedraw = true;
-        }
-
-        protected override void OnPaintBackground(PaintEventArgs e)
-        {
-            using var path = RoundedRect(ClientRectangle, Radius);
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            e.Graphics.Clear(Parent?.BackColor ?? WindowBack);
-            using var brush = new SolidBrush(BackColor);
-            e.Graphics.FillPath(brush, path);
-        }
-
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            base.OnPaint(e);
-            using var path = RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), Radius);
-            using var pen = new Pen(BorderColor, 1f);
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            e.Graphics.DrawPath(pen, path);
-        }
-
-        private static GraphicsPath RoundedRect(Rectangle r, int radius)
-        {
-            int d = radius * 2;
-            var p = new GraphicsPath();
-            p.AddArc(r.X, r.Y, d, d, 180, 90);
-            p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-            p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-            p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-            p.CloseFigure();
-            return p;
-        }
     }
 
     private void Log(string msg)
@@ -556,10 +500,11 @@ public sealed class MainForm : Form
             _applyBtn.Enabled = _rollbackBtn.Enabled = false;
             _installsList.EndUpdate();
 
+            var customPaths = _config.CustomInstallPaths.ToList();
             var data = await Task.Run(() =>
             {
                 var rows = new List<(string Status, string Bin)>();
-                foreach (var inst in BinaryPatcher.FindInstalls())
+                foreach (var inst in BinaryPatcher.FindInstalls(customPaths))
                     foreach (var bin in inst.Binaries)
                     {
                         var st = BinaryPatcher.Inspect(bin) switch
@@ -592,9 +537,9 @@ public sealed class MainForm : Form
             _installsList.EndUpdate();
 
             if (data.HostsApplied)
-                SetStatus(_hostsLabel, Success, $"✓ hosts: закреплено ({data.HostsCount} имён)");
+                SetStatus(_hostsLabel, AppTheme.Success, $"✓ hosts: закреплено ({data.HostsCount} имён)");
             else
-                SetStatus(_hostsLabel, TextSecondary, "• hosts: блока нет");
+                SetStatus(_hostsLabel, AppTheme.TextSecondary, "• hosts: блока нет");
 
             _lastInstallsFound = data.Rows.Count > 0;
             _lastAllPatched = data.Rows.Count > 0 && data.Rows.All(r => r.Status == "пропатчен");
@@ -630,17 +575,17 @@ public sealed class MainForm : Form
     private void UpdateSummary()
     {
         if (!_lastInstallsFound)
-            SetStatus(_summaryLabel, Warning, "• Antigravity не найдена — установите и нажмите «Обновить»");
+            SetStatus(_summaryLabel, AppTheme.Warning, "• Antigravity не найдена — установите и нажмите «Обновить»");
         else if (!IPAddress.TryParse(_ipBox.Text.Trim(), out _))
-            SetStatus(_summaryLabel, Warning, "• Укажите IP сервера и нажмите «Сохранить»");
+            SetStatus(_summaryLabel, AppTheme.Warning, "• Укажите IP сервера и нажмите «Сохранить»");
         else if (!_lastHostsApplied || !_lastAllPatched)
-            SetStatus(_summaryLabel, Danger, "• Требуется патч — нажмите «Применить патч»");
+            SetStatus(_summaryLabel, AppTheme.Danger, "• Требуется патч — нажмите «Применить патч»");
         else if (_lastProbeGreen == false)
-            SetStatus(_summaryLabel, Danger, "• Патч есть, но проверка не пройдена — нажмите «Проверить сервер»");
+            SetStatus(_summaryLabel, AppTheme.Danger, "• Патч есть, но проверка не пройдена — нажмите «Проверить сервер»");
         else if (_lastProbeGreen == true)
-            SetStatus(_summaryLabel, Success, "✓ Всё готово к работе");
+            SetStatus(_summaryLabel, AppTheme.Success, "✓ Всё готово к работе");
         else
-            SetStatus(_summaryLabel, TextSecondary, "• Нажмите «Проверить сервер» для финальной проверки");
+            SetStatus(_summaryLabel, AppTheme.TextSecondary, "• Нажмите «Проверить сервер» для финальной проверки");
     }
 
     private async Task ProbeAsync()
@@ -648,18 +593,18 @@ public sealed class MainForm : Form
         var ip = _ipBox.Text.Trim();
         if (!IPAddress.TryParse(ip, out _))
         {
-            SetStatus(_probeLabel, Danger, "✗ Некорректный IP");
+            SetStatus(_probeLabel, AppTheme.Danger, "✗ Некорректный IP");
             Log($"Проверка отменена: некорректный IP «{ip}».");
             return;
         }
         _lastProbeGreen = null;
         if (_config.VpsToken.Length > 0)
         {
-            SetStatus(_probeLabel, TextSecondary, "• Проверка доступа...");
+            SetStatus(_probeLabel, AppTheme.TextSecondary, "• Проверка доступа...");
             var knocked = await KnockClient.SendAsync(ip, _config.VpsToken);
             Log(knocked ? "[OK] Доступ подтверждён" : "[!!] Доступ не подтверждён — сверьте токен или напишите в поддержку");
         }
-        var progress = new Progress<string>(msg => SetStatus(_probeLabel, TextSecondary, $"• {msg}"));
+        var progress = new Progress<string>(msg => SetStatus(_probeLabel, AppTheme.TextSecondary, $"• {msg}"));
         Log($"Проверка {ip}:443...");
 
         ProbeResult res;
@@ -669,7 +614,7 @@ public sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            SetStatus(_probeLabel, Danger, $"✗ Ошибка проверки: {ex.Message}");
+            SetStatus(_probeLabel, AppTheme.Danger, $"✗ Ошибка проверки: {ex.Message}");
             _lastProbeGreen = false;
             UpdateSummary();
             Log($"[!!] Проверка завершилась ошибкой: {ex.Message}");
@@ -695,7 +640,7 @@ public sealed class MainForm : Form
         {
             _lastProbeGreen = false;
             UpdateSummary();
-            SetStatus(_probeLabel, Danger, $"✗ Сервер недоступен: {res.Error ?? "таймаут"}");
+            SetStatus(_probeLabel, AppTheme.Danger, $"✗ Сервер недоступен: {res.Error ?? "таймаут"}");
             return;
         }
         if (!res.TlsOk)
@@ -703,7 +648,7 @@ public sealed class MainForm : Form
             var reason = string.IsNullOrEmpty(res.Error) ? "" : $" ({res.Error})";
             _lastProbeGreen = false;
             UpdateSummary();
-            SetStatus(_probeLabel, Warning,
+            SetStatus(_probeLabel, AppTheme.Warning,
                 "! Порт 443 открыт, но сертификат Google не получен" + reason + " — SNI-форвардер не настроен или соединение перехватывается?");
             return;
         }
@@ -711,7 +656,7 @@ public sealed class MainForm : Form
         {
             _lastProbeGreen = false;
             UpdateSummary();
-            SetStatus(_probeLabel, Danger,
+            SetStatus(_probeLabel, AppTheme.Danger,
                 $"✗ Туннель до Google работает, НО часть имён уходит мимо сервера! {res.LeakDetail} Это вызывает ошибку «User location is not supported». Пере-примените патч и проверьте IPv6.");
             return;
         }
@@ -723,7 +668,7 @@ public sealed class MainForm : Form
         };
         _lastProbeGreen = true;
         UpdateSummary();
-        SetStatus(_probeLabel, Success, $"✓ Сервер работает, туннель до Google в порядке{dnsNote}");
+        SetStatus(_probeLabel, AppTheme.Success, $"✓ Сервер работает, туннель до Google в порядке{dnsNote}");
     }
 
     private bool AnyAntigravityRunning() =>
@@ -760,6 +705,7 @@ public sealed class MainForm : Form
         UseWaitCursor = true;
         try
         {
+            var customPaths = _config.CustomInstallPaths.ToList();
             await Task.Run(() =>
             {
                 Log($"Патчим на сервер {ip}...");
@@ -767,7 +713,7 @@ public sealed class MainForm : Form
                 KillAntigravityProcesses();
 
                 Log("Патчим бинарники...");
-                var (patched, already, failed) = BinaryPatcher.ApplyAll(Log);
+                var (patched, already, failed) = BinaryPatcher.ApplyAll(Log, customPaths);
 
                 Log("Закрепляем имена в hosts за сервером...");
                 var ok = HostsManager.Apply(_config.RoutedHosts(), addr);
@@ -796,11 +742,12 @@ public sealed class MainForm : Form
         UseWaitCursor = true;
         try
         {
+            var customPaths = _config.CustomInstallPaths.ToList();
             await Task.Run(() =>
             {
                 Log("Возвращаем бинарники к исходному состоянию...");
                 KillAntigravityProcesses();
-                var (restored, failed) = BinaryPatcher.RestoreAll(Log);
+                var (restored, failed) = BinaryPatcher.RestoreAll(Log, customPaths);
                 var hostsOk = HostsManager.Remove();
                 Log(hostsOk ? "[OK] hosts-блок удалён" : $"[!!] не удалось изменить hosts: {HostsManager.LastError ?? "причина неизвестна"}");
                 Log($"\nОткат завершён. Восстановлено: {restored}, ошибок: {failed}.");

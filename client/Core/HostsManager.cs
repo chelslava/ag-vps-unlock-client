@@ -118,7 +118,21 @@ public static class HostsManager
             var tmp = path + ".agvps.tmp";
             var bak = path + ".agvps.bak";
             File.WriteAllText(tmp, updated);
-            if (File.Exists(bak)) File.Delete(bak);
+            if (File.Exists(bak))
+            {
+                var bakAttrs = File.GetAttributes(bak);
+                if (bakAttrs.HasFlag(FileAttributes.ReadOnly))
+                    File.SetAttributes(bak, bakAttrs & ~FileAttributes.ReadOnly);
+                File.Delete(bak);
+            }
+
+            if (File.Exists(path))
+            {
+                var attrs = File.GetAttributes(path);
+                if (attrs.HasFlag(FileAttributes.ReadOnly))
+                    File.SetAttributes(path, attrs & ~FileAttributes.ReadOnly);
+            }
+
             File.Replace(tmp, path, bak);
 
             FlushDnsCache();

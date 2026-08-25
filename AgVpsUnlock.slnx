@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/client.Tests/">
+    <Project Path="client.Tests/AgVpsUnlock.Tests.csproj" />
+  </Folder>
+  <Folder Name="/client/">
+    <Project Path="client/AgVpsUnlock.csproj" />
+  </Folder>
+</Solution>

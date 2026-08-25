@@ -52,15 +52,24 @@ public static class BinaryPatcher
         yield return Path.Combine(extBin, "language_server.exe");
     }
 
-    public static List<InstallInfo> FindInstalls()
+    public static List<InstallInfo> FindInstalls(IEnumerable<string>? customRoots = null)
     {
         var found = new List<InstallInfo>();
-        foreach (var cand in CandidateRoots())
+        var candidates = CandidateRoots().Concat(customRoots ?? Enumerable.Empty<string>()).Distinct();
+        foreach (var cand in candidates)
         {
-            if (!LooksLikeInstall(cand)) continue;
-            var bins = BinaryTargets(cand).Where(File.Exists).ToList();
+            if (string.IsNullOrWhiteSpace(cand)) continue;
+            var trimmed = cand.Trim();
+            if (File.Exists(trimmed))
+            {
+                var dir = Path.GetDirectoryName(trimmed) ?? trimmed;
+                found.Add(new InstallInfo(dir, Path.GetFileName(trimmed), [trimmed]));
+                continue;
+            }
+            if (!LooksLikeInstall(trimmed)) continue;
+            var bins = BinaryTargets(trimmed).Where(File.Exists).Distinct().ToList();
             if (bins.Count == 0) continue;
-            found.Add(new InstallInfo(cand, Path.GetFileName(cand), bins));
+            found.Add(new InstallInfo(trimmed, Path.GetFileName(trimmed), bins));
         }
         return found;
     }
@@ -136,10 +145,10 @@ public static class BinaryPatcher
     /// Rewrites every binary of every install. Running executables lock their
     /// image on Windows, so a failed write retries once after killing the owner.
     /// </summary>
-    public static (int patched, int alreadyPatched, int failed) ApplyAll(LogFn log)
+    public static (int patched, int alreadyPatched, int failed) ApplyAll(LogFn log, IEnumerable<string>? customRoots = null)
     {
         int patched = 0, already = 0, failed = 0;
-        foreach (var inst in FindInstalls())
+        foreach (var inst in FindInstalls(customRoots))
         {
             foreach (var bin in inst.Binaries)
             {
@@ -171,10 +180,10 @@ public static class BinaryPatcher
         return (patched, already, failed);
     }
 
-    public static (int restored, int failed) RestoreAll(LogFn log)
+    public static (int restored, int failed) RestoreAll(LogFn log, IEnumerable<string>? customRoots = null)
     {
         int restored = 0, failed = 0;
-        foreach (var inst in FindInstalls())
+        foreach (var inst in FindInstalls(customRoots))
         {
             foreach (var bin in inst.Binaries)
             {

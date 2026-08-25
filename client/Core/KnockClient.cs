@@ -17,13 +17,21 @@ public static class KnockClient
     public static async Task<bool> SendAsync(
         string vpsIp, string token, int port = DefaultPort, CancellationToken ct = default)
     {
-        var payload = BuildPayload(token, DateTimeOffset.UtcNow);
-        using var udp = new UdpClient();
-        udp.Connect(vpsIp, port);
-        await udp.SendAsync(payload, ct);
-        var recv = udp.ReceiveAsync(ct).AsTask();
-        var done = await Task.WhenAny(recv, Task.Delay(2000, ct));
-        return done == recv && recv.Result.Buffer.Length > 0;
+        try
+        {
+            var payload = BuildPayload(token, DateTimeOffset.UtcNow);
+            using var udp = new UdpClient();
+            udp.Connect(vpsIp, port);
+            await udp.SendAsync(payload, ct);
+            using var delayCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, delayCts.Token);
+            var result = await udp.ReceiveAsync(linkedCts.Token);
+            return result.Buffer.Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     internal static byte[] BuildPayload(string token, DateTimeOffset now)
