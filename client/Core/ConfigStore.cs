@@ -62,7 +62,21 @@ public sealed class ConfigStore
             "www.googleapis.com",
             "oauth2.googleapis.com",
             "cloudaicompanion.googleapis.com",
-            "aiplatform.googleapis.com"
+            // Real API hosts of the cloudaicompanion backend follow the same
+            // "-pa" pattern as cloudcode-pa; X-Cloudaicompanion-Trace-Id
+            // responses come from this family.
+            "cloudaicompanion-pa.googleapis.com",
+            "daily-cloudaicompanion-pa.googleapis.com",
+            "aiplatform.googleapis.com",
+            // Service endpoints of the Electron/Chromium layer (2.10.0):
+            // telemetry, optimization guides and client analytics. Unrouted,
+            // they open DIRECT connections from the home IP while API calls
+            // go through the relay - Google sees one account from two
+            // locations and rejects the API side with FAILED_PRECONDITION.
+            "play.googleapis.com",
+            "optimizationguide-pa.googleapis.com",
+            "waa-pa.clients6.google.com",
+            "signaler-pa.clients6.google.com"
         };
         return core.Concat(ExtraHosts.Select(h => h.Trim().ToLowerInvariant()).Where(h => h.Length > 0)).ToList();
     }
