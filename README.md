@@ -105,6 +105,31 @@ Google блокирует Antigravity по региону. AG Unlock Client ре
 
 ---
 
+## 🖥 Управление сервером (для владельца)
+
+Каталог `server/` содержит всё для стороны VPS: knock-демон и CLI управления
+токенами клиентов.
+
+```bash
+# Установка (Ubuntu/Debian, от root):
+scp -r server/ root@<VPS_IP>:/root/agvps/
+ssh root@<VPS_IP> -- 'cd /root/agvps && ./setup-vps.sh'
+
+# Токены клиентов:
+agvps-token.sh add laptop-1        # создать токен клиента
+agvps-token.sh copy laptop-1       # вывести секрет для передачи клиенту
+agvps-token.sh list                # таблица всех клиентов с полными секретами
+agvps-token.sh revoke laptop-1     # отозвать доступ
+
+# Опционально - закрыть tcp/443 только для авторизованных IP:
+agvps-token.sh lock on             # IP добавляются в allow автоматически по knock
+```
+
+Токен из `add`/`copy`/`list` вставляется в поле «Токен» приложения вместе
+с IP сервера.
+
+---
+
 ## ℹ️ Технические детали
 
 - Windows 10/11 x64 · один `.exe` файл · .NET встроен
