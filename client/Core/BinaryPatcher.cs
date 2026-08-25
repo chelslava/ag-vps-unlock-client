@@ -46,6 +46,8 @@ public static class BinaryPatcher
     private static IEnumerable<string> BinaryTargets(string root)
     {
         yield return Path.Combine(root, "agy.exe");
+        // Since Antigravity 2.10 the main UI binary carries the marker too.
+        yield return Path.Combine(root, "Antigravity.exe");
         yield return Path.Combine(root, "resources", "bin", "language_server.exe");
         var extBin = Path.Combine(root, "resources", "app", "extensions", "antigravity", "bin");
         yield return Path.Combine(extBin, "language_server_windows_x64.exe");
