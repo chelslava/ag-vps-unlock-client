@@ -47,7 +47,7 @@ public sealed class ConfigStore
             }));
     }
 
-    /// <summary>All routed hostnames: the four Antigravity endpoints plus extras.</summary>
+    /// <summary>All routed hostnames: the Antigravity endpoints plus extras.</summary>
     public IReadOnlyList<string> RoutedHosts()
     {
         var core = new[]
@@ -55,7 +55,14 @@ public sealed class ConfigStore
             "cloudcode-pa.googleapis.com",
             "daily-cloudcode-pa.googleapis.com",
             "generativelanguage.googleapis.com",
-            "antigravity-unleash.goog"
+            "antigravity-unleash.goog",
+            // Called by Antigravity's language_server outside the core four.
+            // Unrouted, they leave with the client's real region IP and Google
+            // answers 400 "User location is not supported" (FAILED_PRECONDITION).
+            "www.googleapis.com",
+            "oauth2.googleapis.com",
+            "cloudaicompanion.googleapis.com",
+            "aiplatform.googleapis.com"
         };
         return core.Concat(ExtraHosts.Select(h => h.Trim().ToLowerInvariant()).Where(h => h.Length > 0)).ToList();
     }
