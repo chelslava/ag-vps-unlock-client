@@ -86,6 +86,8 @@ Antigravity VPS Unlock CLI
   AgVpsUnlock.exe --apply [--ip <ip>]   Применить патч и закрепить hosts за сервером
   AgVpsUnlock.exe --rollback            Откатить патч и удалить hosts-блок
   AgVpsUnlock.exe --help                Показать эту справку
+
+Коды выхода: 0 - успех, 1 - ошибка, 2 - токен отклонён или сервер не ответил (--apply)
 ");
     }
 
@@ -121,8 +123,19 @@ Antigravity VPS Unlock CLI
         if (!string.IsNullOrEmpty(token))
         {
             Console.WriteLine($"Отправка knock-пакета на {ip}...");
-            var knocked = await KnockClient.SendAsync(ip, token);
-            Console.WriteLine(knocked ? "[OK] Knock подтвержден" : "[!!] Knock не ответил");
+            var knock = await KnockClient.SendAsync(ip, token);
+            switch (knock)
+            {
+                case KnockResult.Accepted:
+                    Console.WriteLine("[OK] Токен принят сервером");
+                    break;
+                case KnockResult.Rejected:
+                    Console.WriteLine("[!!] Сервер ОТКЛОНИЛ токен - он недействителен или отозван");
+                    break;
+                default:
+                    Console.WriteLine("[!!] Сервер не ответил на авторизацию (UDP 1604) - проверьте IP или файрвол");
+                    break;
+            }
         }
 
         Console.WriteLine($"Проверка сервера {ip}...");
@@ -154,9 +167,20 @@ Antigravity VPS Unlock CLI
 
         if (!string.IsNullOrEmpty(token))
         {
-            Console.WriteLine($"Проверка доступа через knock...");
-            var knocked = await KnockClient.SendAsync(ip, token);
-            Console.WriteLine(knocked ? "[OK] Доступ подтвержден" : "[!!] Доступ не подтвержден");
+            Console.WriteLine("Проверка доступа через knock...");
+            var knock = await KnockClient.SendAsync(ip, token);
+            switch (knock)
+            {
+                case KnockResult.Accepted:
+                    Console.WriteLine("[OK] Доступ подтвержден");
+                    break;
+                case KnockResult.Rejected:
+                    Console.WriteLine("[!!] Сервер отклонил токен - доступ запрещён. Проверьте токен на сервере: agvps-token.sh show <имя>");
+                    return 2;
+                default:
+                    Console.WriteLine("[!!] Сервер не ответил на проверку токена (UDP 1604). Проверьте IP/файрвол или снимите галку блокировки на сервере");
+                    return 2;
+            }
         }
 
         KillAntigravityProcesses();

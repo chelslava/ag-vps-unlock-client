@@ -186,7 +186,9 @@ public sealed class MainForm : Form
             Width = 320,
             Font = (Font)AppTheme.BaseFont.Clone(),
             Text = _config.VpsToken,
-            PlaceholderText = "выдаётся вместе с подпиской"
+            PlaceholderText = "выдаётся вместе с подпиской",
+            PasswordChar = '\u25CF',
+            UseSystemPasswordChar = true
         };
         var tokHost = new Panel
         {
@@ -200,8 +202,28 @@ public sealed class MainForm : Form
         _tokenBox.GotFocus += (_, _) => tokHost.BackColor = AppTheme.Accent;
         _tokenBox.LostFocus += (_, _) => tokHost.BackColor = AppTheme.BorderColor;
         tokHost.Controls.Add(_tokenBox);
+        var tokToggle = new LinkLabel
+        {
+            Text = "показать",
+            AutoSize = true,
+            LinkColor = AppTheme.Accent,
+            LinkBehavior = LinkBehavior.HoverUnderline,
+            Margin = new Padding(0, 8, 14, 0)
+        };
+        tokToggle.Click += (_, _) =>
+        {
+            bool reveal = _tokenBox.UseSystemPasswordChar;
+            _tokenBox.UseSystemPasswordChar = !reveal;
+            _tokenBox.PasswordChar = reveal ? '\0' : '\u25CF';
+            tokToggle.Text = reveal ? "скрыть" : "показать";
+        };
+        var checkTokenBtn = AppTheme.CreateButton("Проверить токен", CheckTokenAsync,
+            AppTheme.SecondaryBtnBack, AppTheme.TextPrimary,
+            Color.FromArgb(0x34, 0x39, 0x45), Color.FromArgb(0x22, 0x26, 0x30), onLog: Log);
         tokenRow.Controls.Add(tokCaption);
         tokenRow.Controls.Add(tokHost);
+        tokenRow.Controls.Add(tokToggle);
+        tokenRow.Controls.Add(checkTokenBtn);
 
         var mid = new TableLayoutPanel
         {
@@ -598,11 +620,27 @@ public sealed class MainForm : Form
             return;
         }
         _lastProbeGreen = null;
+        bool tokenBlocked = false;
         if (_config.VpsToken.Length > 0)
         {
             SetStatus(_probeLabel, AppTheme.TextSecondary, "• Проверка доступа...");
-            var knocked = await KnockClient.SendAsync(ip, _config.VpsToken);
-            Log(knocked ? "[OK] Доступ подтверждён" : "[!!] Доступ не подтверждён — сверьте токен или напишите в поддержку");
+            var knock = await KnockClient.SendAsync(ip, _config.VpsToken);
+            switch (knock)
+            {
+                case KnockResult.Accepted:
+                    Log("[OK] Токен принят сервером");
+                    break;
+                case KnockResult.Rejected:
+                    tokenBlocked = true;
+                    Log("[!!] Сервер ОТКЛОНИЛ токен - он недействителен или отозван");
+                    SetStatus(_probeLabel, AppTheme.Warning, "! Сервер отклонил токен - он недействителен или отозван");
+                    break;
+                default:
+                    tokenBlocked = true;
+                    Log("[!!] Сервер не ответил на авторизацию (UDP 1604) - проверьте IP или файрвол");
+                    SetStatus(_probeLabel, AppTheme.Warning, "! Сервер не ответил на авторизацию (UDP 1604)");
+                    break;
+            }
         }
         var progress = new Progress<string>(msg => SetStatus(_probeLabel, AppTheme.TextSecondary, $"• {msg}"));
         Log($"Проверка {ip}:443...");
@@ -666,9 +704,54 @@ public sealed class MainForm : Form
             true when res.DnsHijacked => "; DNS перехватывается провайдером → работает hosts",
             _ => "; DNS отвечает"
         };
+        if (tokenBlocked)
+        {
+            _lastProbeGreen = false;
+            UpdateSummary();
+            SetStatus(_probeLabel, AppTheme.Warning,
+                "! Сервер работает, но токен не принят — применение патча будет заблокировано. Проверьте токен");
+            return;
+        }
         _lastProbeGreen = true;
         UpdateSummary();
         SetStatus(_probeLabel, AppTheme.Success, $"✓ Сервер работает, туннель до Google в порядке{dnsNote}");
+    }
+
+    /// <summary>Knock-only check of the token currently typed in the field;
+    /// diagnostics-only, does not touch config or binaries.</summary>
+    private async Task CheckTokenAsync()
+    {
+        var ip = _ipBox.Text.Trim();
+        if (!IPAddress.TryParse(ip, out _))
+        {
+            SetStatus(_probeLabel, AppTheme.Danger, "✗ Некорректный IP");
+            Log($"Проверка токена отменена: некорректный IP «{ip}».");
+            return;
+        }
+        var token = _tokenBox.Text.Trim();
+        if (token.Length == 0)
+        {
+            SetStatus(_probeLabel, AppTheme.TextSecondary, "• Токен не задан — режим сервера без блокировки");
+            Log("Токен пустой — сервер работает без блокировки, проверять нечего");
+            return;
+        }
+        SetStatus(_probeLabel, AppTheme.TextSecondary, "• Проверка токена...");
+        var knock = await KnockClient.SendAsync(ip, token);
+        switch (knock)
+        {
+            case KnockResult.Accepted:
+                Log("[OK] Токен принят сервером");
+                SetStatus(_probeLabel, AppTheme.Success, "✓ Токен принят сервером");
+                break;
+            case KnockResult.Rejected:
+                Log("[!!] Сервер ОТКЛОНИЛ токен - он недействителен или отозван");
+                SetStatus(_probeLabel, AppTheme.Warning, "! Сервер отклонил токен - он недействителен или отозван");
+                break;
+            default:
+                Log("[!!] Сервер не ответил на авторизацию (UDP 1604) - проверьте IP или файрвол");
+                SetStatus(_probeLabel, AppTheme.Warning, "! Сервер не ответил на авторизацию (UDP 1604)");
+                break;
+        }
     }
 
     private bool AnyAntigravityRunning() =>
@@ -698,8 +781,26 @@ public sealed class MainForm : Form
         if (_config.VpsToken.Length > 0)
         {
             Log("Проверяем доступ...");
-            var knocked = await KnockClient.SendAsync(ip, _config.VpsToken);
-            Log(knocked ? "[OK] Доступ подтверждён" : "[!!] Доступ не подтверждён — сверьте токен или напишите в поддержку");
+            var knock = await KnockClient.SendAsync(ip, _config.VpsToken);
+            if (knock == KnockResult.Rejected)
+            {
+                Log("[!!] Сервер отклонил токен - доступ запрещён. Проверьте токен на сервере: agvps-token.sh show <имя>");
+                MessageBox.Show(
+                    "Сервер отклонил ваш токен доступа. Применение патча отменено.\n\n" +
+                    "Проверьте токен на сервере командой: agvps-token.sh show <имя>",
+                    "Доступ запрещён", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (knock == KnockResult.NoReply)
+            {
+                Log("[!!] Сервер не ответил на проверку токена (UDP 1604). Проверьте IP/файрвол или снимите галку блокировки на сервере");
+                MessageBox.Show(
+                    "Сервер не ответил на проверку токена (UDP 1604). Применение патча отменено.\n\n" +
+                    "Проверьте IP и файрвол или снимите галку блокировки на сервере.",
+                    "Сервер не ответил", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            Log("[OK] Доступ подтверждён");
         }
 
         UseWaitCursor = true;
