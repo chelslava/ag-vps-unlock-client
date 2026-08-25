@@ -1,0 +1,20 @@
+[Unit]
+Description=AG VPS Unlock — knock-демон релея (UDP 1604)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+DynamicUser=no
+ExecStart=/usr/local/bin/agvpsd.py
+Environment=AGVPS_PORT=1604
+# Внешний файл секретов, пополняемый сторонней автоматикой (например
+# ботом подписок): раскомментируйте при наличии.
+#Environment=AGVPS_LEGACY_TOKENS=/opt/agvps/tokens
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
