@@ -193,8 +193,8 @@ Antigravity VPS Unlock CLI
         if (!string.IsNullOrEmpty(token)) config.VpsToken = token;
         config.Save();
 
-        Console.WriteLine($"Готово. Пропатчено: {patched}, уже было: {already}, ошибок: {failed}");
-        return (failed == 0 && hostsOk) ? 0 : 1;
+        Console.WriteLine($"Готово. Закреплено hosts-имён: {config.RoutedHosts().Count}");
+        return hostsOk ? 0 : 1;
     }
 
     private static int RunRollback(ConfigStore config)
@@ -203,8 +203,8 @@ Antigravity VPS Unlock CLI
         var (restored, failed) = BinaryPatcher.RestoreAll(Console.WriteLine, config.CustomInstallPaths);
         var hostsOk = HostsManager.Remove();
         Console.WriteLine(hostsOk ? "[OK] Hosts очищен" : $"[!!] Ошибка hosts: {HostsManager.LastError}");
-        Console.WriteLine($"Откат завершен. Восстановлено: {restored}, ошибок: {failed}");
-        return (failed == 0 && hostsOk) ? 0 : 1;
+        Console.WriteLine($"Откат завершен.");
+        return hostsOk ? 0 : 1;
     }
 
     private static void KillAntigravityProcesses()

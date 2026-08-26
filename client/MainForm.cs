@@ -600,10 +600,10 @@ public sealed class MainForm : Form
             SetStatus(_summaryLabel, AppTheme.Warning, "• Antigravity не найдена — установите и нажмите «Обновить»");
         else if (!IPAddress.TryParse(_ipBox.Text.Trim(), out _))
             SetStatus(_summaryLabel, AppTheme.Warning, "• Укажите IP сервера и нажмите «Сохранить»");
-        else if (!_lastHostsApplied || !_lastAllPatched)
-            SetStatus(_summaryLabel, AppTheme.Danger, "• Требуется патч — нажмите «Применить патч»");
+        else if (!_lastHostsApplied)
+            SetStatus(_summaryLabel, AppTheme.Danger, "• Требуется настройка hosts — нажмите «Применить патч»");
         else if (_lastProbeGreen == false)
-            SetStatus(_summaryLabel, AppTheme.Danger, "• Патч есть, но проверка не пройдена — нажмите «Проверить сервер»");
+            SetStatus(_summaryLabel, AppTheme.Danger, "• hosts настроен, но проверка не пройдена — нажмите «Проверить сервер»");
         else if (_lastProbeGreen == true)
             SetStatus(_summaryLabel, AppTheme.Success, "✓ Всё готово к работе");
         else
@@ -813,14 +813,14 @@ public sealed class MainForm : Form
                 Log("Завершаем процессы Antigravity...");
                 KillAntigravityProcesses();
 
-                Log("Патчим бинарники...");
+                Log("Настройка hosts (бинарный патч отключён — с AG 2.10 проверка региона серверная)...");
                 var (patched, already, failed) = BinaryPatcher.ApplyAll(Log, customPaths);
 
                 Log("Закрепляем имена в hosts за сервером...");
                 var ok = HostsManager.Apply(_config.RoutedHosts(), addr);
                 Log(ok ? "[OK] hosts обновлён" : $"[!!] не удалось записать hosts: {HostsManager.LastError ?? "нужны права администратора"}");
 
-                Log($"\nГотово. Патчей: {patched}, уже было: {already}, ошибок: {failed}.");
+                Log($"\nГотово. Закреплено hosts-имён: {_config.RoutedHosts().Count}.");
                 Log("Запустите Antigravity и войдите в аккаунт Google.");
             });
             await RefreshAllAsync();
@@ -846,12 +846,12 @@ public sealed class MainForm : Form
             var customPaths = _config.CustomInstallPaths.ToList();
             await Task.Run(() =>
             {
-                Log("Возвращаем бинарники к исходному состоянию...");
+                Log("Откат hosts...");
                 KillAntigravityProcesses();
                 var (restored, failed) = BinaryPatcher.RestoreAll(Log, customPaths);
                 var hostsOk = HostsManager.Remove();
                 Log(hostsOk ? "[OK] hosts-блок удалён" : $"[!!] не удалось изменить hosts: {HostsManager.LastError ?? "причина неизвестна"}");
-                Log($"\nОткат завершён. Восстановлено: {restored}, ошибок: {failed}.");
+                Log($"\nОткат завершён.");
             });
             await RefreshAllAsync();
         }

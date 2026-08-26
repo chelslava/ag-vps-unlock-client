@@ -149,71 +149,19 @@ public static class BinaryPatcher
     /// </summary>
     public static (int patched, int alreadyPatched, int failed) ApplyAll(LogFn log, IEnumerable<string>? customRoots = null)
     {
-        int patched = 0, already = 0, failed = 0;
-        foreach (var inst in FindInstalls(customRoots))
-        {
-            foreach (var bin in inst.Binaries)
-            {
-                try
-                {
-                    switch (Swap(bin, OldName, NewName))
-                    {
-                        case Result.Replaced:
-                            patched++;
-                            log($"[OK] {Path.GetFileName(bin)}: поле переименовано");
-                            break;
-                        case Result.Already:
-                            already++;
-                            log($"[OK] {Path.GetFileName(bin)}: уже пропатчен");
-                            break;
-                        default:
-                            failed++;
-                            log($"[!!] {Path.GetFileName(bin)}: сигнатура не найдена (новая версия?)");
-                            break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    failed++;
-                    log($"[!!] {Path.GetFileName(bin)}: {ex.Message}");
-                }
-            }
-        }
-        return (patched, already, failed);
+        // Binary patch disabled: since Antigravity 2.10 the "ineligible" string
+        // lives inside protobuf descriptors, not eligibility check code. Patching
+        // it corrupts protobuf deserialization and crashes language_server.
+        // Hosts-based routing is the sole bypass mechanism now.
+        log("[--] Бинарный патч отключён (с AG 2.10 проверка региона только серверная)");
+        return (0, 0, 0);
     }
 
     public static (int restored, int failed) RestoreAll(LogFn log, IEnumerable<string>? customRoots = null)
     {
-        int restored = 0, failed = 0;
-        foreach (var inst in FindInstalls(customRoots))
-        {
-            foreach (var bin in inst.Binaries)
-            {
-                try
-                {
-                    switch (Swap(bin, NewName, OldName))
-                    {
-                        case Result.Replaced:
-                            restored++;
-                            log($"[OK] {Path.GetFileName(bin)}: возвращено исходное имя поля");
-                            break;
-                        case Result.Already:
-                            log($"[--] {Path.GetFileName(bin)}: патча нет");
-                            break;
-                        default:
-                            failed++;
-                            log($"[!!] {Path.GetFileName(bin)}: сигнатура не найдена");
-                            break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    failed++;
-                    log($"[!!] {Path.GetFileName(bin)}: {ex.Message}");
-                }
-            }
-        }
-        return (restored, failed);
+        // Binary restore disabled — see ApplyAll comment.
+        log("[--] Бинарный патч отключён (с AG 2.10 откат не требуется)");
+        return (0, 0);
     }
 
     internal enum Result { Replaced, Already, NotFound }
