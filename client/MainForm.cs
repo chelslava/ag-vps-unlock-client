@@ -9,6 +9,8 @@ namespace AgVpsUnlock;
 
 public sealed class MainForm : Form
 {
+    private enum BannerType { Error, Warning, Success }
+
     private readonly ConfigStore _config = ConfigStore.Load();
 
     private TextBox _ipBox = null!;
@@ -27,6 +29,10 @@ public sealed class MainForm : Form
     private Label _summaryLabel = null!;
     private Label _probeLabel = null!;
     private TextBox _log = null!;
+    private Panel _bannerPanel = null!;
+    private Label _bannerLabel = null!;
+    private Label _bannerIcon = null!;
+    private LinkLabel _bannerClose = null!;
 
     public MainForm()
     {
@@ -151,10 +157,10 @@ public sealed class MainForm : Form
         };
         ipHost.Controls.Add(_ipBox);
 
-        _saveBtn = AppTheme.CreateButton("Сохранить", SaveConfig,
+        _saveBtn = AppTheme.CreateButton("&Сохранить", SaveConfig,
             AppTheme.SecondaryBtnBack, AppTheme.TextPrimary,
             Color.FromArgb(0x34, 0x39, 0x45), Color.FromArgb(0x22, 0x26, 0x30), onLog: Log);
-        _probeBtn = AppTheme.CreateButton("Проверить сервер", ProbeAsync,
+        _probeBtn = AppTheme.CreateButton("&Проверить сервер", ProbeAsync,
             AppTheme.Accent, Color.FromArgb(0x0F, 0x14, 0x22),
             Color.FromArgb(0x92, 0xB4, 0xF9), Color.FromArgb(0x69, 0x93, 0xEB), onLog: Log);
 
@@ -217,7 +223,7 @@ public sealed class MainForm : Form
             _tokenBox.PasswordChar = reveal ? '\0' : '\u25CF';
             tokToggle.Text = reveal ? "скрыть" : "показать";
         };
-        var checkTokenBtn = AppTheme.CreateButton("Проверить токен", CheckTokenAsync,
+        var checkTokenBtn = AppTheme.CreateButton("Проверить &токен", CheckTokenAsync,
             AppTheme.SecondaryBtnBack, AppTheme.TextPrimary,
             Color.FromArgb(0x34, 0x39, 0x45), Color.FromArgb(0x22, 0x26, 0x30), onLog: Log);
         tokenRow.Controls.Add(tokCaption);
@@ -255,6 +261,15 @@ public sealed class MainForm : Form
             Margin = new Padding(0, 0, 12, 0)
         };
         addPathLink.Click += (_, _) => AddCustomPathDialog();
+        var extraHostsLink = new LinkLabel
+        {
+            Text = "Дополнительные хосты...",
+            AutoSize = true,
+            LinkColor = AppTheme.Accent,
+            LinkBehavior = LinkBehavior.HoverUnderline,
+            Margin = new Padding(0, 0, 12, 0)
+        };
+        extraHostsLink.Click += (_, _) => OpenExtraHostsDialog();
         var clearPathsLink = new LinkLabel
         {
             Text = "Сбросить кастомные пути",
@@ -264,6 +279,7 @@ public sealed class MainForm : Form
         };
         clearPathsLink.Click += (_, _) => ClearCustomPaths();
         installsHeaderTools.Controls.Add(addPathLink);
+        installsHeaderTools.Controls.Add(extraHostsLink);
         installsHeaderTools.Controls.Add(clearPathsLink);
 
         _installsList = new ListBox
@@ -274,7 +290,7 @@ public sealed class MainForm : Form
             ForeColor = AppTheme.TextPrimary,
             Font = (Font)AppTheme.MonoFont.Clone(),
             DrawMode = DrawMode.OwnerDrawFixed,
-            ItemHeight = Math.Max(18, AppTheme.MonoFont.Height + 6),
+            ItemHeight = Math.Max(22, (int)Math.Ceiling(AppTheme.MonoFont.GetHeight()) + 8),
             IntegralHeight = false
         };
         _installsList.DrawItem += Installs_DrawItem;
@@ -305,6 +321,59 @@ public sealed class MainForm : Form
         mid.Controls.Add(installsCard, 0, 0);
         mid.Controls.Add(stateCard, 1, 0);
 
+        _bannerPanel = new Panel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            Visible = false,
+            BackColor = Color.FromArgb(0x35, 0x1E, 0x22),
+            Padding = new Padding(18, 6, 18, 6)
+        };
+        var bannerInner = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 3,
+            RowCount = 1,
+            BackColor = Color.Transparent
+        };
+        bannerInner.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        bannerInner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        bannerInner.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        _bannerIcon = new Label
+        {
+            Text = "✗",
+            AutoSize = true,
+            Font = (Font)AppTheme.CardHeaderFont.Clone(),
+            ForeColor = AppTheme.Danger,
+            Margin = new Padding(0, 2, 8, 0)
+        };
+        _bannerLabel = new Label
+        {
+            Text = "",
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 9.25f),
+            ForeColor = AppTheme.Danger,
+            Margin = new Padding(0, 2, 8, 0)
+        };
+        _bannerClose = new LinkLabel
+        {
+            Text = "✕",
+            AutoSize = true,
+            LinkColor = AppTheme.TextSecondary,
+            LinkBehavior = LinkBehavior.HoverUnderline,
+            Font = new Font("Segoe UI", 9f),
+            Margin = new Padding(0, 2, 0, 0)
+        };
+        _bannerClose.Click += (_, _) => HideBanner();
+
+        bannerInner.Controls.Add(_bannerIcon, 0, 0);
+        bannerInner.Controls.Add(_bannerLabel, 1, 0);
+        bannerInner.Controls.Add(_bannerClose, 2, 0);
+        _bannerPanel.Controls.Add(bannerInner);
+
         var actions = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
@@ -313,13 +382,13 @@ public sealed class MainForm : Form
             BackColor = AppTheme.WindowBack,
             Padding = new Padding(18, 6, 18, 12)
         };
-        _applyBtn = AppTheme.CreateButton("Применить патч", ApplyPatchAsync,
+        _applyBtn = AppTheme.CreateButton("П&рименить патч", ApplyPatchAsync,
             AppTheme.Success, Color.FromArgb(0x10, 0x1B, 0x15),
             Color.FromArgb(0x92, 0xD6, 0xA8), Color.FromArgb(0x6E, 0xB7, 0x85), onLog: Log);
-        _rollbackBtn = AppTheme.CreateButton("Полный откат", RollbackAllAsync,
+        _rollbackBtn = AppTheme.CreateButton("Полный от&кат", RollbackAllAsync,
             AppTheme.CardBack, AppTheme.Danger,
             Color.FromArgb(0x3A, 0x28, 0x2B), Color.FromArgb(0x2E, 0x21, 0x24), border: AppTheme.Danger, onLog: Log);
-        _refreshBtn = AppTheme.CreateButton("Обновить", () => _ = RefreshAllAsync(),
+        _refreshBtn = AppTheme.CreateButton("&Обновить", () => _ = RefreshAllAsync(),
             AppTheme.SecondaryBtnBack, AppTheme.TextSecondary,
             Color.FromArgb(0x34, 0x39, 0x45), Color.FromArgb(0x22, 0x26, 0x30), onLog: Log);
         actions.Controls.Add(_applyBtn);
@@ -382,6 +451,7 @@ public sealed class MainForm : Form
 
         Controls.Add(mid);
         Controls.Add(logHost);
+        Controls.Add(_bannerPanel);
         Controls.Add(actions);
         Controls.Add(tokenRow);
         Controls.Add(ipRow);
@@ -419,6 +489,113 @@ public sealed class MainForm : Form
         _config.Save();
         Log("Пользовательские пути сброшены");
         _ = RefreshAllAsync();
+    }
+
+    private void OpenExtraHostsDialog()
+    {
+        using var dlg = new Form
+        {
+            Text = "Дополнительные хосты маршрутизации",
+            Font = (Font)AppTheme.BaseFont.Clone(),
+            BackColor = AppTheme.WindowBack,
+            ForeColor = AppTheme.TextPrimary,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            Size = new Size(520, 420),
+            Padding = new Padding(18)
+        };
+
+        var desc = new Label
+        {
+            Text = "Укажите дополнительные доменные имена (по одному на строку), которые должны перенаправляться через VPS-релей.\nБазовые хосты Google включены автоматически.",
+            AutoSize = false,
+            Dock = DockStyle.Top,
+            Height = 44,
+            ForeColor = AppTheme.TextSecondary,
+            Font = new Font("Segoe UI", 8.75f)
+        };
+
+        var txtBox = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            ScrollBars = ScrollBars.Vertical,
+            BackColor = AppTheme.InputBack,
+            ForeColor = AppTheme.TextPrimary,
+            Font = (Font)AppTheme.MonoFont.Clone(),
+            BorderStyle = BorderStyle.FixedSingle,
+            Text = string.Join(Environment.NewLine, _config.ExtraHosts)
+        };
+
+        var btnRow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            AutoSize = true,
+            FlowDirection = FlowDirection.RightToLeft,
+            Padding = new Padding(0, 12, 0, 0)
+        };
+
+        var cancelBtn = AppTheme.CreateButton("Отмена", () => dlg.DialogResult = DialogResult.Cancel,
+            AppTheme.SecondaryBtnBack, AppTheme.TextSecondary,
+            Color.FromArgb(0x34, 0x39, 0x45), Color.FromArgb(0x22, 0x26, 0x30));
+
+        var okBtn = AppTheme.CreateButton("&Сохранить", () =>
+        {
+            var rawLines = txtBox.Text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var l in rawLines)
+            {
+                var h = l.Trim().ToLowerInvariant();
+                if (h.Length > 0 && !h.StartsWith("#"))
+                    hosts.Add(h);
+            }
+            _config.ExtraHosts = hosts.ToList();
+            _config.Save();
+            Log($"Обновлены дополнительные хосты ({_config.ExtraHosts.Count} шт.)");
+            dlg.DialogResult = DialogResult.OK;
+        }, AppTheme.Accent, Color.FromArgb(0x0F, 0x14, 0x22),
+        Color.FromArgb(0x92, 0xB4, 0xF9), Color.FromArgb(0x69, 0x93, 0xEB));
+
+        btnRow.Controls.Add(cancelBtn);
+        btnRow.Controls.Add(okBtn);
+
+        dlg.Controls.Add(txtBox);
+        dlg.Controls.Add(desc);
+        dlg.Controls.Add(btnRow);
+        dlg.AcceptButton = okBtn;
+        dlg.CancelButton = cancelBtn;
+
+        if (dlg.ShowDialog(this) == DialogResult.OK)
+        {
+            _ = RefreshAllAsync();
+        }
+    }
+
+    private void ShowBanner(string message, BannerType type = BannerType.Error)
+    {
+        if (InvokeRequired) { BeginInvoke(() => ShowBanner(message, type)); return; }
+        var (back, fore, icon) = type switch
+        {
+            BannerType.Warning => (Color.FromArgb(0x38, 0x2E, 0x1A), AppTheme.Warning, "!"),
+            BannerType.Success => (Color.FromArgb(0x1B, 0x30, 0x22), AppTheme.Success, "✓"),
+            _ => (Color.FromArgb(0x35, 0x1E, 0x22), AppTheme.Danger, "✗")
+        };
+        _bannerPanel.BackColor = back;
+        _bannerIcon.ForeColor = fore;
+        _bannerIcon.Text = icon;
+        _bannerLabel.ForeColor = fore;
+        _bannerLabel.Text = message;
+        _bannerClose.LinkColor = fore;
+        _bannerPanel.Visible = true;
+    }
+
+    private void HideBanner()
+    {
+        if (InvokeRequired) { BeginInvoke(HideBanner); return; }
+        _bannerPanel.Visible = false;
     }
 
     private static CardPanel NewCard(string title, out Control body)
@@ -497,7 +674,7 @@ public sealed class MainForm : Form
             new Point(e.Bounds.X + 2, e.Bounds.Y + 2), selected ? AppTheme.TextPrimary : color,
             TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
         if ((e.State & DrawItemState.Focus) != 0)
-            e.DrawFocusRectangle();
+            ControlPaint.DrawFocusRectangle(e.Graphics, e.Bounds, AppTheme.TextPrimary, selected ? AppTheme.SelectionBack : AppTheme.CardBack);
     }
 
     private void Log(string msg)
@@ -583,10 +760,10 @@ public sealed class MainForm : Form
         var ip = _ipBox.Text.Trim();
         if (!IPAddress.TryParse(ip, out _))
         {
-            MessageBox.Show("Введите корректный IPv4-адрес.", "Ошибка",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ShowBanner("Введите корректный IPv4-адрес сервера.", BannerType.Error);
             return;
         }
+        HideBanner();
         _config.VpsIp = ip;
         _config.VpsToken = _tokenBox.Text.Trim();
         _config.Save();
@@ -616,9 +793,11 @@ public sealed class MainForm : Form
         if (!IPAddress.TryParse(ip, out _))
         {
             SetStatus(_probeLabel, AppTheme.Danger, "✗ Некорректный IP");
+            ShowBanner("Проверка отменена: некорректный IPv4-адрес сервера.", BannerType.Error);
             Log($"Проверка отменена: некорректный IP «{ip}».");
             return;
         }
+        HideBanner();
         _lastProbeGreen = null;
         bool tokenBlocked = false;
         if (_config.VpsToken.Length > 0)
@@ -634,11 +813,13 @@ public sealed class MainForm : Form
                     tokenBlocked = true;
                     Log("[!!] Сервер ОТКЛОНИЛ токен - он недействителен или отозван");
                     SetStatus(_probeLabel, AppTheme.Warning, "! Сервер отклонил токен - он недействителен или отозван");
+                    ShowBanner("Сервер отклонил токен: он недействителен или отозван.", BannerType.Warning);
                     break;
                 default:
                     tokenBlocked = true;
                     Log("[!!] Сервер не ответил на авторизацию (UDP 1604) - проверьте IP или файрвол");
                     SetStatus(_probeLabel, AppTheme.Warning, "! Сервер не ответил на авторизацию (UDP 1604)");
+                    ShowBanner("Сервер не ответил на авторизацию (UDP 1604) — проверьте IP или файрвол.", BannerType.Warning);
                     break;
             }
         }
@@ -655,6 +836,7 @@ public sealed class MainForm : Form
             SetStatus(_probeLabel, AppTheme.Danger, $"✗ Ошибка проверки: {ex.Message}");
             _lastProbeGreen = false;
             UpdateSummary();
+            ShowBanner($"Ошибка проверки сервера: {ex.Message}", BannerType.Error);
             Log($"[!!] Проверка завершилась ошибкой: {ex.Message}");
             return;
         }
@@ -679,6 +861,7 @@ public sealed class MainForm : Form
             _lastProbeGreen = false;
             UpdateSummary();
             SetStatus(_probeLabel, AppTheme.Danger, $"✗ Сервер недоступен: {res.Error ?? "таймаут"}");
+            ShowBanner($"Сервер недоступен: {res.Error ?? "таймаут"}", BannerType.Error);
             return;
         }
         if (!res.TlsOk)
@@ -688,6 +871,7 @@ public sealed class MainForm : Form
             UpdateSummary();
             SetStatus(_probeLabel, AppTheme.Warning,
                 "! Порт 443 открыт, но сертификат Google не получен" + reason + " — SNI-форвардер не настроен или соединение перехватывается?");
+            ShowBanner("Порт 443 открыт, но сертификат Google не получен — SNI-форвардер не настроен.", BannerType.Warning);
             return;
         }
         if (res.RoutingLeak)
@@ -696,6 +880,7 @@ public sealed class MainForm : Form
             UpdateSummary();
             SetStatus(_probeLabel, AppTheme.Danger,
                 $"✗ Туннель до Google работает, НО часть имён уходит мимо сервера! {res.LeakDetail} Это вызывает ошибку «User location is not supported». Пере-примените патч и проверьте IPv6.");
+            ShowBanner("Обнаружена утечка маршрутизации: часть имён уходит мимо сервера!", BannerType.Error);
             return;
         }
         var dnsNote = res.DnsReachable switch
@@ -710,6 +895,7 @@ public sealed class MainForm : Form
             UpdateSummary();
             SetStatus(_probeLabel, AppTheme.Warning,
                 "! Сервер работает, но токен не принят — применение патча будет заблокировано. Проверьте токен");
+            ShowBanner("Сервер работает, но токен не принят — проверьте токен доступа.", BannerType.Warning);
             return;
         }
         _lastProbeGreen = true;
@@ -725,9 +911,11 @@ public sealed class MainForm : Form
         if (!IPAddress.TryParse(ip, out _))
         {
             SetStatus(_probeLabel, AppTheme.Danger, "✗ Некорректный IP");
+            ShowBanner("Проверка токена отменена: некорректный IPv4-адрес сервера.", BannerType.Error);
             Log($"Проверка токена отменена: некорректный IP «{ip}».");
             return;
         }
+        HideBanner();
         var token = _tokenBox.Text.Trim();
         if (token.Length == 0)
         {
@@ -746,10 +934,12 @@ public sealed class MainForm : Form
             case KnockResult.Rejected:
                 Log("[!!] Сервер ОТКЛОНИЛ токен - он недействителен или отозван");
                 SetStatus(_probeLabel, AppTheme.Warning, "! Сервер отклонил токен - он недействителен или отозван");
+                ShowBanner("Сервер отклонил токен доступа: он недействителен или отозван.", BannerType.Warning);
                 break;
             default:
                 Log("[!!] Сервер не ответил на авторизацию (UDP 1604) - проверьте IP или файрвол");
                 SetStatus(_probeLabel, AppTheme.Warning, "! Сервер не ответил на авторизацию (UDP 1604)");
+                ShowBanner("Сервер не ответил на авторизацию (UDP 1604) — проверьте IP или файрвол.", BannerType.Warning);
                 break;
         }
     }
@@ -764,10 +954,10 @@ public sealed class MainForm : Form
         var ip = _ipBox.Text.Trim();
         if (!IPAddress.TryParse(ip, out var addr))
         {
-            MessageBox.Show("Введите корректный IPv4-адрес сервера.", "Ошибка",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ShowBanner("Введите корректный IPv4-адрес сервера.", BannerType.Error);
             return;
         }
+        HideBanner();
         _config.VpsIp = ip;
         _config.Save();
 
@@ -785,19 +975,13 @@ public sealed class MainForm : Form
             if (knock == KnockResult.Rejected)
             {
                 Log("[!!] Сервер отклонил токен - доступ запрещён. Проверьте токен на сервере: agvps-token.sh show <имя>");
-                MessageBox.Show(
-                    "Сервер отклонил ваш токен доступа. Применение патча отменено.\n\n" +
-                    "Проверьте токен на сервере командой: agvps-token.sh show <имя>",
-                    "Доступ запрещён", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ShowBanner("Сервер отклонил токен доступа. Применение патча отменено.", BannerType.Error);
                 return;
             }
             if (knock == KnockResult.NoReply)
             {
                 Log("[!!] Сервер не ответил на проверку токена (UDP 1604). Проверьте IP/файрвол или снимите галку блокировки на сервере");
-                MessageBox.Show(
-                    "Сервер не ответил на проверку токена (UDP 1604). Применение патча отменено.\n\n" +
-                    "Проверьте IP и файрвол или снимите галку блокировки на сервере.",
-                    "Сервер не ответил", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ShowBanner("Сервер не ответил на проверку токена (UDP 1604). Применение патча отменено.", BannerType.Warning);
                 return;
             }
             Log("[OK] Доступ подтверждён");
@@ -807,6 +991,7 @@ public sealed class MainForm : Form
         try
         {
             var customPaths = _config.CustomInstallPaths.ToList();
+            bool hostsOk = false;
             await Task.Run(() =>
             {
                 Log($"Патчим на сервер {ip}...");
@@ -817,12 +1002,16 @@ public sealed class MainForm : Form
                 var (patched, already, failed) = BinaryPatcher.ApplyAll(Log, customPaths);
 
                 Log("Закрепляем имена в hosts за сервером...");
-                var ok = HostsManager.Apply(_config.RoutedHosts(), addr);
-                Log(ok ? "[OK] hosts обновлён" : $"[!!] не удалось записать hosts: {HostsManager.LastError ?? "нужны права администратора"}");
+                hostsOk = HostsManager.Apply(_config.RoutedHosts(), addr);
+                Log(hostsOk ? "[OK] hosts обновлён" : $"[!!] не удалось записать hosts: {HostsManager.LastError ?? "нужны права администратора"}");
 
                 Log($"\nГотово. Закреплено hosts-имён: {_config.RoutedHosts().Count}.");
                 Log("Запустите Antigravity и войдите в аккаунт Google.");
             });
+            if (!hostsOk)
+            {
+                ShowBanner($"Не удалось записать файл hosts: {HostsManager.LastError ?? "требуются права администратора"}", BannerType.Error);
+            }
             await RefreshAllAsync();
         }
         finally
@@ -844,15 +1033,20 @@ public sealed class MainForm : Form
         try
         {
             var customPaths = _config.CustomInstallPaths.ToList();
+            bool hostsOk = false;
             await Task.Run(() =>
             {
                 Log("Откат hosts...");
                 KillAntigravityProcesses();
                 var (restored, failed) = BinaryPatcher.RestoreAll(Log, customPaths);
-                var hostsOk = HostsManager.Remove();
+                hostsOk = HostsManager.Remove();
                 Log(hostsOk ? "[OK] hosts-блок удалён" : $"[!!] не удалось изменить hosts: {HostsManager.LastError ?? "причина неизвестна"}");
                 Log($"\nОткат завершён.");
             });
+            if (!hostsOk)
+            {
+                ShowBanner($"Не удалось изменить файл hosts: {HostsManager.LastError ?? "причина неизвестна"}", BannerType.Error);
+            }
             await RefreshAllAsync();
         }
         finally

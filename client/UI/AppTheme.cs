@@ -17,7 +17,7 @@ public static class AppTheme
     public static readonly Color Danger = Color.FromArgb(0xF2, 0x8B, 0x82);
     public static readonly Color SecondaryBtnBack = Color.FromArgb(0x2A, 0x2E, 0x38);
     public static readonly Color DisabledBack = Color.FromArgb(0x22, 0x25, 0x2D);
-    public static readonly Color DisabledFore = Color.FromArgb(0x5A, 0x5F, 0x69);
+    public static readonly Color DisabledFore = Color.FromArgb(0x8A, 0x90, 0x9B);
     public static readonly Color SelectionBack = Color.FromArgb(0x2E, 0x33, 0x40);
 
     public static readonly Font BaseFont = new("Segoe UI", 9.75f);
